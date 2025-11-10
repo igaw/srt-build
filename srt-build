@@ -19,7 +19,7 @@ import yaml
 from pprint import pprint, pformat
 from time import sleep
 from shutil import copyfile, copytree
-from subprocess import run, Popen, PIPE, STDOUT
+from subprocess import run, Popen, PIPE, STDOUT, CalledProcessError
 import multiprocessing
 
 
@@ -112,7 +112,7 @@ def run_cmd(cmd, cwd=None):
     loop = asyncio.get_event_loop_policy().get_event_loop()
     (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
     if ret:
-        sys.exit(ret)
+        sys.exit(1)
     return (ret, output)
 
 
@@ -129,7 +129,9 @@ def _atexit_handler():
     loop.close()
 
 def create_logger():
-    log = logging.getLogger()  # root logger
+    log = logging.getLogger(__name__)
+    if log.handlers:
+        return log
     log.setLevel(logging.INFO)
     format_str = '%(asctime)s - %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
@@ -137,7 +139,7 @@ def create_logger():
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     log.addHandler(stream_handler)
-    return logging.getLogger(__name__)
+    return log
 
 def setup():
     create_logger()
@@ -155,7 +157,11 @@ def setup():
 
 class Context():
     def __init__(self, args):
-        self.__dict__ = machine_config[args.MACHINE]
+        # Validate that the machine exists in machine_config
+        if args.MACHINE not in machine_config:
+            raise KeyError(f'Machine "{args.MACHINE}" not found in machine_config')
+        mc = machine_config[args.MACHINE]
+        self.__dict__.update(mc)
         self.__dict__['args'] = args
         if args.builddir:
             self.__dict__['build_path'] = args.builddir
@@ -191,10 +197,10 @@ def cmd_config(ctx):
         #run_make(ctx, ['kvmconfig'])
 
         cfgs = [ctx.config_path + '/' + ctx.config]
-        for c in kernel_config[ctx.args.config_base]:
+        for c in kernel_config.get(ctx.args.config_base, []):
             cfgs += [ctx.config_path + '/' + c]
         if ctx.args.flavor:
-            for c in kernel_config[ctx.args.flavor]:
+            for c in kernel_config.get(ctx.args.flavor, []):
                 cfgs += [ctx.config_path + '/' + c]
 
         for cfg in cfgs:
@@ -321,7 +327,7 @@ def generate_file(job, testname, devicename):
 def generate_split_files(td, job, devicename, duration):
     split_files = []
 
-    job = yaml.load(job, Loader=yaml.FullLoader)
+    job = yaml.safe_load(job)
 
     idx = 0
     for val in job['actions']:
@@ -416,7 +422,7 @@ def cmd_lava(ctx):
                 filename = testpath + '/' + file
                 job = generate_job(ctx.job_path, filename, job_ctx)
 
-                j = yaml.load(job, Loader=yaml.FullLoader)
+                j = yaml.safe_load(job)
                 if ctx.args.tests and j['job_name'] != ctx.args.tests:
                     continue
 
@@ -573,7 +579,7 @@ def job_result_print(jobid, job_ctx, metadata, result, download=False):
         return
 
     try:
-        res_ctx = yaml.load(result, Loader=yaml.FullLoader)
+        res_ctx = yaml.safe_load(result)
     except yaml.YAMLError as exc:
         pprint(exc)
         return
@@ -622,7 +628,7 @@ def get_job_context(id, ctx):
     data = {}
     try:
         (_, res) = run_cmd(['lavacli', 'jobs', 'show', '--yaml', str(id)])
-        job = yaml.load(res, Loader=yaml.FullLoader)
+        job = yaml.safe_load(res)
         host = job['device'].split('-')[0]
         data['host'] = host
         data['description'] = job['description']
@@ -671,7 +677,7 @@ def cmd_jobs_results(ctx):
 
 def get_result(jobid, result):
     try:
-        job_ctx = yaml.load(result, Loader=yaml.FullLoader)
+        job_ctx = yaml.safe_load(result)
     except yaml.YAMLError as exc:
         pprint(exc)
         return
