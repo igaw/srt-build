@@ -5,8 +5,9 @@
 import argparse
 import sys
 import logging
+import asyncio
 
-from .config import load_config
+from .config import load_config, bcolors
 from .core import setup, check_kernel_source_directory
 from .helpers import Context
 from .commands import (
@@ -63,6 +64,16 @@ def main():
     # Parse arguments first to determine which command
     parser = create_parser()
     args = parser.parse_args(sys.argv[1:])
+
+    # Test hook: allow tests to inject a short sleep window to reliably send SIGINT
+    # (Used by tests/test_ctrl_c.py). This keeps production behavior unchanged.
+    import os  # local import to avoid polluting module namespace unnecessarily
+    import time
+    import contextlib
+    _sleep = os.getenv("SRT_BUILD_TEST_SLEEP")
+    if _sleep:
+        with contextlib.suppress(Exception):
+            time.sleep(float(_sleep))
 
     # Determine if kernel source directory is required for this invocation
     kernel_commands = [
@@ -129,4 +140,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Graceful Ctrl-C handling
+        print(f"{bcolors.WARNING}Interrupted by user (Ctrl-C). Exiting cleanly.{bcolors.ENDC}")
+        # Use 130 (128 + SIGINT) as conventional exit code for Ctrl-C
+        sys.exit(130)
+    except asyncio.CancelledError:
+        print(f"{bcolors.WARNING}Operation cancelled. Exiting cleanly.{bcolors.ENDC}")
+        sys.exit(130)
