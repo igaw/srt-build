@@ -301,6 +301,8 @@ def get_jobs(machine, job_id, system_config, batch=False):
                         for x in line.split(":")[1].split(' ')
                         if x
                     ]
+    except FileNotFoundError:
+        debug(f'No jobs file found for machine {machine} at {jobfile}')
     except Exception as exc:
         error(f'Error reading jobs file for machine {machine}: {exc}')
     return [int(job_id)]
@@ -321,6 +323,11 @@ def get_job_list(ctx, system_config):
                     debug(f'Error parsing job id from line: {line} ({exc})')
                     continue
                 jobs.append(id)
+    except FileNotFoundError:
+        # No jobs file exists yet for this machine
+        debug(
+            f'No jobs file found for machine {ctx.args.machine} at {jobfile}'
+        )
     except Exception as exc:
         error(f'Error reading jobs file for machine {ctx.args.machine}: {exc}')
     return jobs

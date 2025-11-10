@@ -15,12 +15,29 @@ def add_parser(subparser):
 
 def cmd_jobs_compare(ctx, system_config, rt_suites, suites):
     """Compare results between two job IDs."""
+    if not ctx.args.id1 or not ctx.args.id2:
+        print('Error: Two job IDs are required for comparison.')
+        print('Usage: jobs compare <machine> <id1> <id2>')
+        return
+
     ensure_lavacli_available()
-    id1 = int(ctx.args.id1)
-    id2 = int(ctx.args.id2)
+    
+    try:
+        id1 = int(ctx.args.id1)
+        id2 = int(ctx.args.id2)
+    except ValueError as exc:
+        print(f'Error: Job IDs must be integers: {exc}')
+        return
 
     r1 = get_results(ctx.args.machine, id1, system_config, rt_suites, suites)
     r2 = get_results(ctx.args.machine, id2, system_config, rt_suites, suites)
+
+    if not r1:
+        print(f'No results found for job {id1}')
+        return
+    if not r2:
+        print(f'No results found for job {id2}')
+        return
 
     for e in r1:
         c = lookup_entry(r2, e[0], e[1])

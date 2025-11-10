@@ -12,5 +12,12 @@ def add_parser(subparser):
 
 def cmd_jobs_list(ctx, system_config):
     """List all job IDs for the specified machine."""
-    for id in get_job_list(ctx, system_config):
+    jobs = get_job_list(ctx, system_config)
+    if not jobs:
+        print(
+            f'No jobs found for machine {ctx.args.machine}. '
+            f'Run a job first with "lava" or "smoke" command.'
+        )
+        return
+    for id in jobs:
         print(id)
