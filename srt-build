@@ -353,7 +353,7 @@ def generate_job(job_path, filename, job_ctx):
 
 
 def generate_file(job, testname, devicename):
-    filename = 'test-{}-{}.yaml'.format(testname, devicename)
+    filename = f'test-{testname}-{devicename}.yaml'
     with open(filename, 'w') as f:
         f.write(job)
     return [ filename ]
@@ -388,7 +388,7 @@ def generate_split_files(td, job, devicename, duration):
             if duration:
                 # overwrite duration from job file template with
                 # the value provided from the command line
-                t['parameters']['DURATION'] = '{}s'.format(duration)
+                t['parameters']['DURATION'] = f'{duration}s'
             else:
                 duration = convert_to_seconds(t['parameters']['DURATION'])
             timeout = { 'seconds': duration + 120 }
@@ -408,7 +408,7 @@ def generate_split_files(td, job, devicename, duration):
 
         job['actions'][idx] = action
 
-        filename = '{}/test-{}-{}.yaml'.format(td, t['name'], devicename)
+        filename = f'{td}/test-{t["name"]}-{devicename}.yaml'
         with open(filename, 'w') as f:
             yaml.dump(job, f, default_flow_style=False)
         split_files.append(filename)
@@ -472,13 +472,12 @@ def cmd_lava(ctx):
     if jobs == []:
         print('no jobs')
         return
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.machine), 'a') as f:
-        f.write('{}: '.format(jobs[0]))
+    with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'a') as f:
+        f.write(f'{jobs[0]}: ')
         f.write(' '.join(jobs))
         f.write('\n')
 
-    print('job id: {}'.format(jobs[0]))
+    print(f'job id: {jobs[0]}')
 
 
 def cmd_smoke(ctx):
@@ -502,21 +501,19 @@ def cmd_smoke(ctx):
             (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
             jobs.append(str(res).strip())
 
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.machine), 'a') as f:
-        f.write('{}: '.format(jobs[0]))
+    with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'a') as f:
+        f.write(f'{jobs[0]}: ')
         f.write(' '.join(jobs))
         f.write('\n')
 
-    print('job id: {}'.format(jobs[0]))
+    print(f'job id: {jobs[0]}')
 
 
 def get_jobs(machine, job_id, batch=False):
     if not batch:
         return [int(job_id)]
 
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            machine), 'r') as f:
+    with open(f'{system_config["jobfiles-path"]}/srt-build.{machine}.jobs', 'r') as f:
         for l in f.readlines():
             try:
                 id = l.split(':')[0]
@@ -530,8 +527,7 @@ def get_jobs(machine, job_id, batch=False):
 
 def get_job_list(ctx):
     jobs = []
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.machine), 'r') as f:
+    with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'r') as f:
         for l in f.readlines():
             try:
                 id = int(l.split(':')[0])
@@ -581,8 +577,7 @@ def handle_rt_results(test, job_ctx):
         result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
     else:
         result = bcolors.FAIL + 'fail' + bcolors.ENDC
-    print('  {:5} {:20} {:20}: {} {:>10.2f}'.format(
-        test['job'], test['suite'], test['name'], result, measurement))
+    print(f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: {result} {measurement:>10.2f}')
 
 def job_result_print(jobid, job_ctx, metadata, result, download=False):
     class bcolors:
@@ -596,7 +591,7 @@ def job_result_print(jobid, job_ctx, metadata, result, download=False):
         UNDERLINE = '\033[4m'
 
     if not result:
-        print('   {:5} no results'.format(jobid))
+        print(f'   {jobid:5} no results')
         return
 
     try:
@@ -615,33 +610,26 @@ def job_result_print(jobid, job_ctx, metadata, result, download=False):
                 result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
             else:
                 result = bcolors.FAIL + 'fail' + bcolors.ENDC
-            print('  {:5} {:20} {:20}: {}'.format(
-                test['job'], test['suite'], test['name'], result))
+            print(f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: {result}')
         elif test['result'] == 'fail':
             result = bcolors.FAIL + 'fail' + bcolors.ENDC
-            print('  {:5} {:20} {:20}: {}'.format(
-                test['job'], test['suite'], test['name'], result))
+            print(f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: {result}')
 
         if 'test-attachment' == test['name']:
             if 'reference' not in test['metadata']:
                 continue
             if download:
                 url = test['metadata']['reference']
-                # print('  {:5} {}'.format(test['job'], url))
+                # print(f'  {test["job"]:5} {url}')
 
                 data = None
                 with urllib.request.urlopen(url) as f:
                     data = f.read().decode('utf-8')
 
                 d = json.loads(data)
-                fname = '{}/{}/{}/{}/{}/{}.json'.format(system_config['result-path'],
-                                                     metadata['host'],
-                                                     d['sysinfo']['release'],
-                                                     test['suite'][2:],
-                                                     test['job'],
-                                                     test['suite'][2:])
+                fname = f'{system_config["result-path"]}/{metadata["host"]}/{d["sysinfo"]["release"]}/{test["suite"][2:]}/{test["job"]}/{test["suite"][2:]}.json'
                 os.makedirs(os.path.dirname(fname), exist_ok=True)
-                print('  {:5} {}'.format(test['job'], fname))
+                print(f'  {test["job"]:5} {fname}')
                 with open(fname, 'w') as outfile:
                     outfile.write(data)
 
@@ -689,7 +677,7 @@ def cmd_jobs_results(ctx):
         if ctx.args.description:
             if metadata['description'] != ctx.args.description:
                 return
-        print('{host}\t{description}\t{version}'.format(**metadata))
+        print(f'{metadata["host"]}\t{metadata["description"]}\t{metadata["version"]}')
         job_result_print(id, job_ctx, metadata, res, ctx.args.download)
         return
 
@@ -750,9 +738,8 @@ def cmd_jobs_compare(ctx):
         diff = 0
         if c[3] != 0:
             diff = (e[3] - c[3])/c[3] * 100
-        val = '{:>10.2f}/{:>10.2f}'.format(e[3], c[3])
-        print('  {:20} {:20} {:20} {:10} {:>10.2f}%'.format(
-            e[0], e[1], e[2] + '/' + c[2], val, diff))
+        val = f'{e[3]:>10.2f}/{c[3]:>10.2f}'
+        print(f'  {e[0]:20} {e[1]:20} {e[2] + "/" + c[2]:20} {val:10} {diff:>10.2f}%')
 
 
 def cmd_jobs_cancel(ctx):
