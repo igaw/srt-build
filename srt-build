@@ -34,6 +34,10 @@ kernel_config = {}
 
 machine_config = {}
 
+rt_suites = []
+
+suites = []
+
 _config_candidates = [
     os.path.join(os.path.dirname(__file__), 'config.yml'),
     os.path.join(os.getcwd(), 'config.yml'),
@@ -57,6 +61,8 @@ for _p in _config_candidates:
 system_config = _loaded_cfg.get('system_config', system_config)
 kernel_config = _loaded_cfg.get('kernel_config', kernel_config)
 machine_config = _loaded_cfg.get('machine_config', machine_config)
+rt_suites = _loaded_cfg.get('rt_suites', rt_suites)
+suites = _loaded_cfg.get('suites', suites)
 
 ##############################
 
@@ -557,22 +563,6 @@ def handle_rt_results(test, job_ctx):
         result = bcolors.FAIL + 'fail' + bcolors.ENDC
     print('  {:5} {:20} {:20}: {} {:>10.2f}'.format(
         test['job'], test['suite'], test['name'], result, measurement))
-
-rt_suites = ['0_jd-hackbench',
-             '0_jd-compile',
-             '0_jd-stress_ptrace',
-             '0_cyclicdeadline',
-             '0_cyclictest',
-             '0_pi-stress',
-             '0_pmqtest',
-             '0_ptsematest',
-             '0_rt-migrate-test',
-             '0_signaltest',
-             '0_sigwaittest',
-             '0_svsematest',
-             '0_rtla-osnoise',
-             '0_rtla-timelat']
-suites = ['0_smoke-tests']
 
 def job_result_print(jobid, job_ctx, metadata, result, download=False):
     class bcolors:
