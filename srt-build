@@ -116,10 +116,14 @@ async def run_cmd_async(cmd, cwd=None):
 
 def run_cmd(cmd, cwd=None):
     debug(cmd)
-    loop = asyncio.get_event_loop()
-    (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
+    try:
+        loop = asyncio.get_event_loop()
+        (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
+    except Exception as exc:
+        error(f'Exception while running command {cmd}: {exc}')
+        return (1, str(exc))
     if ret:
-        sys.exit(1)
+        error(f'Command failed: {cmd} (exit code {ret})')
     return (ret, output)
 
 
@@ -330,13 +334,13 @@ def load_job_ctx(filename):
                     job_ctx = yaml.safe_load(stream) or {}
                     return job_ctx
                 except yaml.YAMLError as exc:
-                    print(f"error parsing job ctx {path}: {exc}")
+                    error(f"YAML parse error in job ctx {path}: {exc}")
                     return {}
         except Exception as exc:
-            print(f"error reading {path}: {exc}")
+            error(f"Error reading job context file {path}: {exc}")
             continue
 
-    print(f"job context not found; tried: {candidates}")
+    error(f"Job context not found; tried: {candidates}")
     return job_ctx
 
 
@@ -513,27 +517,35 @@ def get_jobs(machine, job_id, batch=False):
     if not batch:
         return [int(job_id)]
 
-    with open(f'{system_config["jobfiles-path"]}/srt-build.{machine}.jobs', 'r') as f:
-        for l in f.readlines():
-            try:
-                id = l.split(':')[0]
-                n = int(id)
-            except:
-                continue
-            if id and n == job_id:
-                return [ int(x.strip()) for x in l.split(":")[1].split(' ') if x]
+    try:
+        with open(f'{system_config["jobfiles-path"]}/srt-build.{machine}.jobs', 'r') as f:
+            for line in f.readlines():
+                try:
+                    id = line.split(':')[0]
+                    n = int(id)
+                except Exception as exc:
+                    debug(f'Error parsing job id from line: {line} ({exc})')
+                    continue
+                if id and n == job_id:
+                    return [ int(x.strip()) for x in line.split(":")[1].split(' ') if x]
+    except Exception as exc:
+        error(f'Error reading jobs file for machine {machine}: {exc}')
     return [int(job_id)]
 
 
 def get_job_list(ctx):
     jobs = []
-    with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'r') as f:
-        for l in f.readlines():
-            try:
-                id = int(l.split(':')[0])
-            except:
-                continue
-            jobs.append(id)
+    try:
+        with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'r') as f:
+            for line in f.readlines():
+                try:
+                    id = int(line.split(':')[0])
+                except Exception as exc:
+                    debug(f'Error parsing job id from line: {line} ({exc})')
+                    continue
+                jobs.append(id)
+    except Exception as exc:
+        error(f'Error reading jobs file for machine {ctx.args.machine}: {exc}')
     return jobs
 
 
@@ -555,7 +567,8 @@ def handle_rt_results(test, job_ctx):
 
     try:
         measurement = float(test['measurement'])
-    except:
+    except Exception as exc:
+        debug(f'Could not parse measurement: {exc}')
         measurement = 0.0
 
     max_latency = -1
@@ -643,7 +656,8 @@ def get_job_context(id, ctx):
         data['description'] = job['description']
         job_ctx = load_job_ctx(ctx.job_path + '/boards/' + host + '.yaml')
         return (data, job_ctx)
-    except:
+    except Exception as exc:
+        error(f'Error getting job context for job {id}: {exc}')
         return None
 
 def cmd_jobs_results(ctx):
@@ -689,8 +703,11 @@ def get_result(jobid, result):
     try:
         job_ctx = yaml.safe_load(result)
     except yaml.YAMLError as exc:
-        pprint(exc)
-        return
+        error(f'YAML error in job result for job {jobid}: {exc}')
+        return []
+    except Exception as exc:
+        error(f'Error loading job result for job {jobid}: {exc}')
+        return []
 
     table = []
     for test in job_ctx:
@@ -700,11 +717,11 @@ def get_result(jobid, result):
 
         try:
             measurement = float(test['measurement'])
-        except:
+        except Exception as exc:
+            debug(f'Could not parse measurement: {exc}')
             measurement = 0.0
 
-        table.append([test['suite'], test['name'],
-                      test['result'], measurement])
+        table.append([test['suite'], test['name'], test['result'], measurement])
 
     return table
 
