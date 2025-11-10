@@ -27,14 +27,21 @@ def add_parser(subparser):
 
 def cmd_jobs_results(ctx, system_config, rt_suites, suites):
     """Display results for LAVA jobs."""
-    ensure_lavacli_available()
     if not ctx.args.id:
         jobs = get_job_list(ctx, system_config)
+        if not jobs:
+            print(
+                f'No jobs found for machine {ctx.args.machine}. '
+                f'Run a job first with "lava" or "smoke" command.'
+            )
+            return
         id = int(jobs[-1])
         batch = True
     else:
         id = int(ctx.args.id)
         batch = ctx.args.batch
+
+    ensure_lavacli_available()
 
     metadata, job_ctx = get_job_context(id, ctx)
     if not job_ctx:

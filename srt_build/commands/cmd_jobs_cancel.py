@@ -14,12 +14,19 @@ def add_parser(subparser):
 
 def cmd_jobs_cancel(ctx, system_config):
     """Cancel LAVA jobs by ID."""
-    ensure_lavacli_available()
     if not ctx.args.id:
         jobs = get_job_list(ctx, system_config)
+        if not jobs:
+            print(
+                f'No jobs found for machine {ctx.args.machine}. '
+                f'Nothing to cancel.'
+            )
+            return
         id = int(jobs[-1])
     else:
         id = int(ctx.args.id)
+
+    ensure_lavacli_available()
 
     for j in get_jobs(ctx.args.machine, id, system_config, batch=True):
         print(j)
