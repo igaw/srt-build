@@ -82,6 +82,28 @@ def main():
         # Pass necessary config to commands that need it
         if args.func == cmd_config.cmd_config:
             args.func(ctx, kernel_config)
+        elif args.func == cmd_lava.cmd_lava:
+            args.func(ctx, system_config, kernel_config)
+        elif args.func == cmd_smoke.cmd_smoke:
+            args.func(ctx, system_config)
+        elif args.func == cmd_all.cmd_all:
+            args.func(ctx, kernel_config)
+        elif hasattr(args, 'jobs_cmd'):
+            # Jobs subcommands
+            from .commands import (
+                cmd_jobs_list, cmd_jobs_results,
+                cmd_jobs_compare, cmd_jobs_cancel
+            )
+            if args.func == cmd_jobs_list.cmd_jobs_list:
+                args.func(ctx, system_config)
+            elif args.func == cmd_jobs_results.cmd_jobs_results:
+                args.func(ctx, system_config, rt_suites, suites)
+            elif args.func == cmd_jobs_compare.cmd_jobs_compare:
+                args.func(ctx, system_config, rt_suites, suites)
+            elif args.func == cmd_jobs_cancel.cmd_jobs_cancel:
+                args.func(ctx, system_config)
+            else:
+                args.func(ctx)
         else:
             args.func(ctx)
     else:

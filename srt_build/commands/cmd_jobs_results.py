@@ -1,4 +1,8 @@
 """Jobs results command - display LAVA job results."""
+import re
+from ..helpers import ensure_lavacli_available, get_job_list, get_jobs
+from ..results import get_job_context, job_result_print
+from ..core import run_cmd
 
 
 def add_parser(subparser):
@@ -21,8 +25,50 @@ def add_parser(subparser):
     return rpsg
 
 
-def cmd_jobs_results(ctx):
+def cmd_jobs_results(ctx, system_config, rt_suites, suites):
     """Display results for LAVA jobs."""
-    # Import necessary functions from main module when refactored
-    # ensure_lavacli_available, get_job_list, get_jobs, etc.
-    pass
+    ensure_lavacli_available()
+    if not ctx.args.id:
+        jobs = get_job_list(ctx, system_config)
+        id = int(jobs[-1])
+        batch = True
+    else:
+        id = int(ctx.args.id)
+        batch = ctx.args.batch
+
+    metadata, job_ctx = get_job_context(id, ctx)
+    if not job_ctx:
+        return
+
+    if ctx.args.raw:
+        (_, res) = run_cmd(['lavacli', 'jobs', 'logs', str(id)])
+        version = re.compile(r'.*Linux version ([-0-9a-zA-Z\.]+)')
+        m = version.search(res, re.MULTILINE)
+        if m:
+            metadata['version'] = m.group(1)
+        else:
+            metadata['version'] = ''
+
+        (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(id)])
+
+        if ctx.args.host and metadata['host'] != ctx.args.host:
+            return
+        if (ctx.args.description and
+                metadata['description'] != ctx.args.description):
+            return
+        print(
+            f'{metadata["host"]}\t{metadata["description"]}\t'
+            f'{metadata["version"]}'
+        )
+        job_result_print(
+            id, job_ctx, metadata, res, system_config,
+            rt_suites, suites, ctx.args.download
+        )
+        return
+
+    for j in get_jobs(ctx.args.machine, id, system_config, batch):
+        (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(j)])
+        job_result_print(
+            j, job_ctx, metadata, res, system_config,
+            rt_suites, suites, ctx.args.download
+        )
