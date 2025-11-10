@@ -21,6 +21,7 @@ from time import sleep
 from shutil import copyfile, copytree
 from subprocess import run, Popen, PIPE, STDOUT, CalledProcessError
 import multiprocessing
+import shutil
 
 
 system_config = {
@@ -165,6 +166,23 @@ def setup():
 
 
 #######################################
+
+def ensure_lavacli_available():
+    """
+    Verify that 'lavacli' is available in PATH. If not, emit a clear warning
+    and exit with a non-zero status to avoid cryptic shell errors later.
+
+    This is required for commands that interact with LAVA (lava, smoke, jobs results,
+    jobs compare, jobs cancel).
+    """
+    if shutil.which('lavacli') is None:
+        warning(
+            "'lavacli' command not found. Please install it to use LAVA-related commands.\n"
+            "- Via pipx (recommended): pipx install lavacli\n"
+            "- Via pip: pip install lavacli\n"
+            "Refer to https://docs.lavasoftware.org/lava/lavacli.html for details."
+        )
+        sys.exit(1)
 
 class Context():
     def __init__(self, args):
@@ -393,6 +411,7 @@ def generate_split_files(td, job, devicename, duration):
 
 
 def cmd_lava(ctx):
+    ensure_lavacli_available()
     ctx.args.config = ''
 
     flavors = ['rt', 'nohz', 'vp', 'll', 'up']
@@ -457,6 +476,7 @@ def cmd_lava(ctx):
 
 
 def cmd_smoke(ctx):
+    ensure_lavacli_available()
     duration = convert_to_seconds(ctx.args.duration)
 
     jobs = []
@@ -649,6 +669,7 @@ def get_job_context(id, ctx):
         return None
 
 def cmd_jobs_results(ctx):
+    ensure_lavacli_available()
     if not ctx.args.id:
         jobs = get_job_list(ctx)
         id = int(jobs[-1])
@@ -725,6 +746,7 @@ def lookup_entry(table, suite, name):
 
 
 def cmd_jobs_compare(ctx):
+    ensure_lavacli_available()
     id1 = int(ctx.args.id1)
     id2 = int(ctx.args.id2)
 
@@ -744,6 +766,7 @@ def cmd_jobs_compare(ctx):
 
 
 def cmd_jobs_cancel(ctx):
+    ensure_lavacli_available()
     if not ctx.args.id:
         jobs = get_job_list(ctx)
         id = int(jobs[-1])
