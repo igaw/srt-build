@@ -74,43 +74,31 @@ def _list_configs(ctx, kernel_config):
     else:
         _print_table(headers, [])
 
-    # Kernel config groups table
+    # Kernel config groups - grouped display in single table
     print(f"\n{bcolors.BOLD}Kernel config groups:{bcolors.ENDC}")
-    krows = []
+    
+    # Group entries by (config_base, flavor) combination
+    from collections import defaultdict
+    grouped = defaultdict(list)
     for group, entries in kernel_config.items():
         if not isinstance(entries, list):
             continue
         for entry in entries:
             if not entry:
                 continue
-            path = os.path.join(ctx.config_path, entry)
             flavor = _flavor_for_group(group)
-            krows.append([
-                _display_group(group),
-                flavor,
-                entry,
-                path,
-                _fmt_bool(os.path.isfile(path)),
-            ])
-    _print_table(["Config Base", "Flavor", "Fragment", "Path", "Exists"], krows)
-
-    # Flavors summary table
-    print(f"\n{bcolors.BOLD}Flavors summary:{bcolors.ENDC}")
-    flavors = ["rt", "nohz", "vp", "ll", "up", "none"]
-    frows = []
-    for fl in flavors:
-        entries = kernel_config.get(fl, []) if isinstance(kernel_config, dict) else []
-        total = len([e for e in entries if e])
-        missing = 0
-        for entry in entries:
-            if not entry:
-                continue
-            path = os.path.join(ctx.config_path, entry)
-            if not os.path.isfile(path):
-                missing += 1
-        status = _fmt_bool(missing == 0)
-        frows.append([fl, total, missing, status])
-    _print_table(["Flavor", "Fragments", "Missing", "Ready"], frows)
+            display_group = _display_group(group)
+            key = (display_group, flavor)
+            grouped[key].append(entry)
+    
+    # Build table with Base Config, Flavor, and Fragments columns
+    krows = []
+    for (config_base, flavor), fragments in sorted(grouped.items()):
+        # Join all fragments in one line, comma-separated
+        fragments_str = ", ".join(fragments)
+        krows.append([config_base, flavor, fragments_str])
+    
+    _print_table(["Base Config", "Flavor", "Fragments"], krows)
 
 
 def cmd_config(ctx, kernel_config):
