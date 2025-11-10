@@ -92,6 +92,9 @@ def run_cmd(cmd, cwd=None):
     try:
         loop = asyncio.get_event_loop()
         (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Re-raise to let top-level handler deal with it gracefully
+        raise KeyboardInterrupt() from None
     except Exception as exc:
         error(f'Exception while running command {cmd}: {exc}')
         return (1, str(exc))
