@@ -103,18 +103,20 @@ def _list_configs(ctx, kernel_config):
 
 def cmd_config(ctx, kernel_config):
     """Configure kernel build based on machine and flavor settings."""
-    if ctx.args.list:
+    if getattr(ctx.args, 'list', False):
         _list_configs(ctx, kernel_config)
         return
-    if not ctx.args.config:
+    if not getattr(ctx.args, 'config', None):
         run_make(ctx, [ctx.defconfig])
         #run_make(ctx, ['kvmconfig'])
 
         cfgs = [ctx.config_path + '/' + ctx.config]
-        for c in kernel_config.get(ctx.args.config_base, []):
+        config_base = getattr(ctx.args, 'config_base', '')
+        for c in kernel_config.get(config_base, []):
             cfgs += [ctx.config_path + '/' + c]
-        if ctx.args.flavor:
-            for c in kernel_config.get(ctx.args.flavor, []):
+        flavor = getattr(ctx.args, 'flavor', '')
+        if flavor:
+            for c in kernel_config.get(flavor, []):
                 cfgs += [ctx.config_path + '/' + c]
 
         for cfg in cfgs:
@@ -128,7 +130,8 @@ def cmd_config(ctx, kernel_config):
         copyfile(ctx.args.config, ctx.build_path + '/.config')
         # add machine config
         cfgs = [ctx.config_path + '/' + ctx.config]
-        for c in kernel_config[ctx.args.config_base]:
+        config_base = getattr(ctx.args, 'config_base', '')
+        for c in kernel_config.get(config_base, []):
             cfgs += [ctx.config_path + '/' + c]
         for cfg in cfgs:
             run_cmd(['scripts/kconfig/merge_config.sh',
