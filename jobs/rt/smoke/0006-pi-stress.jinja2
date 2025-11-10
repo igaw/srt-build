@@ -1,0 +1,20 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'pi-stress' %}
+
+{% block tests %}
+    timeout:
+      minutes: 1
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/pi-stress/pi-stress.yaml
+      name: pi-stress
+      parameters:
+        DURATION: "{{ pi_stress.duration|default('1m') }}"
+        BACKGROUND_CMD: "{{ pi_stress.background_cmd|default('hackbench') }}"
+        MLOCKALL: "true"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

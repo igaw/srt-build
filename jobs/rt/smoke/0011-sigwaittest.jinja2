@@ -1,0 +1,17 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'sigwaittest' %}
+
+{% block tests %}
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/sigwaittest/sigwaittest.yaml
+      name: sigwaittest
+      parameters:
+        DURATION: "{{ sigwaittest.duration|default('1m') }}"
+        BACKGROUND_CMD: "{{ sigwaittest.background_cmd|default('hackbench') }}"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

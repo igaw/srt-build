@@ -1,0 +1,4 @@
+#
+# NETWORK
+#
+CONFIG_R8169=y

@@ -1,0 +1,44 @@
+job_name: {{ job_name }}
+device_type: {{ device_type }}
+timeouts:
+  job:
+    minutes: 5
+  action:
+    minutes: 5
+  connection:
+    minutes: 5
+priority: medium
+visibility: public
+tags: {{ tags }}
+
+actions:
+- deploy:
+    timeout:
+      minutes: 5
+    to: tftp
+    kernel:
+      url: {{ kernel_url }}
+      type: {{ kernel_type }}
+{% if dtb_url %}
+    dtb:
+      url: {{ dtb_url }}
+{% endif %}
+    nfsrootfs:
+      url: {{ nfsroot_url }}
+    os: debian
+
+- boot:
+    timeout:
+      minutes: 5
+    method: {{ boot_method }}
+    commands: nfs
+    auto_login:
+      login_prompt: 'login:'
+      username: root
+    prompts:
+      - 'lava:'
+      - 'tw:'
+
+- test:
+{% block tests %}
+{% endblock tests -%}

@@ -1,0 +1,18 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'rt-migrate-test' %}
+
+{% block tests %}
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/rt-migrate-test/rt-migrate-test.yaml
+      name: rt-migrate-test
+      parameters:
+        PRIORITY: "{{ rt_migrate_test.priority|default('51') }}"
+        DURATION: "{{ rt_migrate_test.duration|default('1m') }}"
+        BACKGROUND_CMD: "{{ rt_migrate_test.background_cmd|default('hackbench') }}"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

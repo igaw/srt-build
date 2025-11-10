@@ -1,0 +1,22 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'stress-ng-shm-sysv' %}
+
+{% block tests %}
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/cyclictest/cyclictest.yaml
+      name: cyclictest
+      parameters:
+        PRIORITY: "{{ cyclictest.priority|default('98') }}"
+        INTERVAL: "{{ cyclictest.interval|default('1000') }}"
+        THREADS: "{{ cyclictest.threads|default('1') }}"
+        AFFINITY: "{{ cyclictest.affinity|default('0') }}"
+        DURATION: "{{ cyclictest.duration|default('1m') }}"
+        HISTOGRAM: "{{ cyclictest.histogram|default('') }}"
+        BACKGROUND_CMD: "{{ cyclictest.background_cmd|default('stress-ng -v --shm-sysv 0') }}"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

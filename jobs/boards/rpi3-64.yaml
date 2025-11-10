@@ -1,0 +1,53 @@
+device_type: 'bcm2837-rpi-3-b'
+kernel_url: 'http://lava.lan:8080/artifacts/rpi3-64/rpi3-64-image'
+kernel_type: 'image'
+dtb_url: 'http://lava.lan:8080/artifacts/rpi3-64/bcm2837-rpi-3-b-plus.dtb'
+nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs/lava-image.aarch64-1.tar.xz'
+boot_method: 'u-boot'
+
+#test_definitions_url: '/var/lib/lava/artifacts/test-definitions.git'
+#test_definitions_url: https://github.com/igaw/test-definitions.git
+test_definitions_url: git://git.lan/test-definitions
+test_definitions_branch: 'master'
+
+artifactorial_url: http://artifactory.lan:8000/artifacts/rt-tests/
+artifactorial_token: '4200d0ac96ca7e0b93f24cd304a56cbd'
+
+jitterdebugger:
+  max_latency: 180
+
+cyclicdeadline:
+  threads: 4
+  max_latency: 180
+  interval: 5000
+
+cyclictest:
+  threads: 4
+  affinity: 0-3
+  max_latency: 180
+  histogram: 200
+
+pi_stress:
+
+pmqtest:
+  max_latency: 200
+
+ptsematest:
+  max_latency: 200
+
+rt_migrate_test:
+
+signaltest:
+  max_latency: 250
+
+sigwaittest:
+  max_latency: 200
+
+svsematest:
+  max_latency: 200
+
+rtla_osnoise:
+  max_latency: 200
+
+rtla_timerlat:
+  max_latency: 200

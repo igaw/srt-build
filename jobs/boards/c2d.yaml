@@ -1,0 +1,55 @@
+device_type: 'x86'
+kernel_url: http://lava.lan:8080/artifacts/c2d/c2d-image
+kernel_type: 'zimage'
+#nfsroot_url: http://lava.lan:8080/artifacts/rootfs/debian-x86_64.tar
+nfsroot_url: http://lava.lan:8080/artifacts/rootfs/lava-image.x86_64-1.tar.xz
+#nfsroot_url: https://download.opensuse.org/repositories/home:/wagi:/lava/images/lava-image.x86_64-0.1-image_x86_64-Buildbenchmark.3.1.tar.xz
+boot_method: 'ipxe'
+
+#test_definitions_url: '/var/lib/lava/artifacts/test-definitions.git'
+#test_definitions_url: https://github.com/Linaro/test-definitions.git
+#test_definitions_url: https://github.com/igaw/test-definitions.git
+test_definitions_url: git://git.lan/test-definitions
+test_definitions_branch: 'master'
+
+artifactorial_url: http://artifactory.lan:8000/artifacts/rt-tests/
+artifactorial_token: '4200d0ac96ca7e0b93f24cd304a56cbd'
+
+jitterdebugger:
+  max_latency: 35
+
+cyclicdeadline:
+  threads: 2
+  max_latency: 35
+  interval: 5000
+
+cyclictest:
+  threads: 2
+  affinity: 0-1
+  max_latency: 35
+  histogram: 100
+
+pi_stress:
+
+pmqtest:
+  max_latency: 50
+
+ptsematest:
+  max_latency: 50
+
+rt_migrate_test:
+
+signaltest:
+  max_latency: 50
+
+sigwaittest:
+  max_latency: 50
+
+svsematest:
+  max_latency: 50
+
+rtla_osnoise:
+  max_latency: 50
+
+rtla_timerlat:
+  max_latency: 50

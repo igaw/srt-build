@@ -1,0 +1,19 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'signaltest' %}
+
+{% block tests %}
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/signaltest/signaltest.yaml
+      name: signaltest
+      parameters:
+        PRIORITY: "{{ signaltest.priority|default('98') }}"
+        THREADS: "{{ signaltest.threads|default('2') }}"
+        DURATION: "{{ signaltest.duration|default('1m') }}"
+        BACKGROUND_CMD: "{{ signaltest.background_cmd|default('hackbench') }}"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

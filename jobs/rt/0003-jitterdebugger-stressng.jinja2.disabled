@@ -1,0 +1,19 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'jitterdebugger stressng' %}
+
+{% block tests %}
+    timeout:
+      minutes: 2
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/jitterdebugger/jitterdebugger.yaml
+      name: jd-stress_ptrace
+      parameters:
+        DURATION: "{{ jitterdebugger.duration|default('1m') }}"
+        TESTS: "stress_ptrace"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

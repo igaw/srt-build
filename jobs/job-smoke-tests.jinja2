@@ -1,0 +1,15 @@
+{% extends 'job-base.jinja2' %}
+
+tags: {{ tags }}
+
+{% set job_name = 'smoke-tests' %}
+
+{% block tests %}
+    timeout:
+      minutes: 5
+    definitions:
+    - repository: http://git.linaro.org/lava-team/lava-functional-tests.git
+      from: git
+      path: lava-test-shell/smoke-tests-basic.yaml
+      name: smoke-tests
+{% endblock tests -%}

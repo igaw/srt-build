@@ -1,0 +1,20 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'cyclicdeadline' %}
+
+{% block tests %}
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/cyclicdeadline/cyclicdeadline.yaml
+      name: cyclicdeadline
+      parameters:
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        BACKGROUND_CMD: "{{ cyclicdeadline.background_cmd|default('hackbench') }}"
+        DURATION: "{{ cyclicdeadline.duration|default('1m') }}"
+        INTERVAL: "{{ cyclicdeadline.interval|default('1000') }}"
+        STEP: "{{ cyclicdeadline.step|default('500') }}"
+        THREADS: "{{ cyclicdeadline.threads|default('1') }}"
+{% endblock tests -%}

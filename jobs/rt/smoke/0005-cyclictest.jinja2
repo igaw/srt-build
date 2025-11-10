@@ -1,0 +1,22 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'cyclictest' %}
+
+{% block tests %}
+    definitions:
+    - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+      from: git
+      branch: {{ test_definitions_branch|default('master') }}
+      path: automated/linux/cyclictest/cyclictest.yaml
+      name: cyclictest
+      parameters:
+        AFFINITY: "{{ cyclictest.affinity|default('0') }}"
+        ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+        ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+        BACKGROUND_CMD: "{{ cyclictest.background_cmd|default('hackbench') }}"
+        DURATION: "{{ cyclictest.duration|default('1m') }}"
+        HISTOGRAM: "{{ cyclictest.histogram|default('') }}"
+        INTERVAL: "{{ cyclictest.interval|default('1000') }}"
+        PRIORITY: "{{ cyclictest.priority|default('98') }}"
+        THREADS: "{{ cyclictest.threads|default('1') }}"
+{% endblock tests -%}

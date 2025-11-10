@@ -1,0 +1,52 @@
+device_type: 'x86_64'
+kernel_url: 'http://lava.lan:8080/artifacts/lf/lf-image'
+kernel_type: 'bzImage'
+nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs/debian-x86_64.tar'
+boot_method: 'ipxe'
+tags:
+  - lf
+
+# test_definitions_url: '/var/lib/lava/artifacts/test-definitions.git'
+test_definitions_url: git://git.lan/test-definitions
+test_definitions_branch: 'master'
+
+artifactorial_url: http://artifactory.lan:8000/artifacts/rt-tests/
+artifactorial_token: '4200d0ac96ca7e0b93f24cd304a56cbd'
+
+jitterdebugger:
+  max_latency: 35
+
+cyclicdeadline:
+  threads: 2
+  max_latency: 35
+
+cyclictest:
+  threads: 2
+  affinity: 0-1
+  max_latency: 35
+
+pi_stress:
+
+pmqtest:
+  max_latency: 50
+
+ptsematest:
+  max_latency: 50
+
+rt_migrate_test:
+  duration: 10s
+
+signaltest:
+  max_latency: 50
+
+sigwaittest:
+  max_latency: 50
+
+svsematest:
+  max_latency: 50
+
+rtla_osnoise:
+  max_latency: 50
+
+rtla_timerlat:
+  max_latency: 50
