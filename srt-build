@@ -23,6 +23,41 @@ from subprocess import run, Popen, PIPE, STDOUT
 import multiprocessing
 
 
+system_config = {
+    'base-build-path':  '.',
+    'base-tool-path': '.',
+    'jobfiles-path': '.',
+    'result-path': '.',
+}
+
+kernel_config = {}
+
+machine_config = {}
+
+_config_candidates = [
+    os.path.join(os.path.dirname(__file__), 'config.yml'),
+    os.path.join(os.getcwd(), 'config.yml'),
+    os.path.expanduser('~/.config/srt-build/config.yml'),
+]
+
+_loaded_cfg = {}
+for _p in _config_candidates:
+    try:
+        if os.path.exists(_p):
+            with open(_p, 'r') as _f:
+                try:
+                    _loaded_cfg = yaml.safe_load(_f) or {}
+                    break
+                except yaml.YAMLError as exc:
+                    warning('failed to parse %s: %s', _p, exc)
+    except Exception as exc:
+        warning('error while attempting to open %s: %s', _p, exc)
+
+# override in-file defaults if user config provides entries
+system_config = _loaded_cfg.get('system_config', system_config)
+kernel_config = _loaded_cfg.get('kernel_config', kernel_config)
+machine_config = _loaded_cfg.get('machine_config', machine_config)
+
 ##############################
 
 class LogOutput:
@@ -234,31 +269,6 @@ def convert_to_seconds(string):
     if postfix == 'm':
         return seconds * 60
     return seconds
-
-# Try loading a YAML config from several candidate locations and override defaults.
-_config_candidates = [
-    os.path.join(os.path.dirname(__file__), 'config.yml'),
-    os.path.join(os.getcwd(), 'config.yml'),
-    os.path.expanduser('~/.config/srt-build/config.yml'),
-]
-
-_loaded_cfg = {}
-for _p in _config_candidates:
-    try:
-        if os.path.exists(_p):
-            with open(_p, 'r') as _f:
-                try:
-                    _loaded_cfg = yaml.safe_load(_f) or {}
-                    break
-                except yaml.YAMLError as exc:
-                    warning('failed to parse %s: %s', _p, exc)
-    except Exception as exc:
-        warning('error while attempting to open %s: %s', _p, exc)
-
-# override in-file defaults if user config provides entries
-system_config = _loaded_cfg.get('system_config', system_config)
-kernel_config = _loaded_cfg.get('kernel_config', kernel_config)
-machine_config = _loaded_cfg.get('machine_config', machine_config)
 
 def load_job_ctx(filename):
     job_ctx = {}
