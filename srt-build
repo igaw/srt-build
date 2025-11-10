@@ -23,10 +23,10 @@ import shutil
 
 
 system_config = {
-    'base-build-path':  '.',
+    'base-build-path':  os.path.expanduser('~/.cache/srt-build/build'),
     'base-tool-path': '.',
-    'jobfiles-path': '.',
-    'result-path': '.',
+    'jobfiles-path': os.path.expanduser('~/.cache/srt-build/jobs'),
+    'result-path': os.path.expanduser('~/.cache/srt-build/results'),
 }
 
 kernel_config = {}
@@ -171,6 +171,11 @@ def setup():
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, interruption)
     atexit.register(_atexit_handler)
+
+    # Ensure cache directories exist
+    os.makedirs(system_config['base-build-path'], exist_ok=True)
+    os.makedirs(system_config['jobfiles-path'], exist_ok=True)
+    os.makedirs(system_config['result-path'], exist_ok=True)
 
 
 #######################################
@@ -518,7 +523,7 @@ def cmd_lava(ctx):
             testpath = _get_testpath(ctx, fl)
             _process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
 
-            copytree(td, '/home/wagi/tmp/jobs', dirs_exist_ok=True)
+            copytree(td, system_config['jobfiles-path'], dirs_exist_ok=True)
 
     _save_job_ids(ctx, jobs)
 
