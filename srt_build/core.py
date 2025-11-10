@@ -5,6 +5,32 @@ import asyncio
 import signal
 import atexit
 import os
+import sys
+from .config import bcolors
+
+
+def check_kernel_source_directory():
+    """Check if current directory is a Linux kernel source tree."""
+    # Check if README starts with "Linux kernel"
+    readme_path = 'README'
+    if os.path.exists(readme_path):
+        try:
+            with open(readme_path, 'r', encoding='utf-8') as f:
+                first_line = f.readline().strip()
+                if first_line.startswith('Linux kernel'):
+                    return  # Valid kernel source directory
+        except Exception:
+            pass  # Fall through to error
+    
+    # Not a kernel source directory
+    print(f"{bcolors.FAIL}Error: This does not appear to be a Linux "
+          f"kernel source directory.{bcolors.ENDC}")
+    print(f"\n{bcolors.OKBLUE}Please run this tool from the root of a "
+          f"Linux kernel source tree.{bcolors.ENDC}")
+    print(f"{bcolors.OKBLUE}Example:{bcolors.ENDC}")
+    print("  cd /path/to/linux")
+    print("  /path/to/srt-build-new config c2d")
+    sys.exit(1)
 
 
 class LogOutput:
@@ -120,6 +146,9 @@ def create_logger():
 
 def setup(system_config):
     """Set up logging, event loop, and directories."""
+    # Check if we're in a kernel source directory first
+    check_kernel_source_directory()
+    
     create_logger()
     logging.getLogger('asyncio').setLevel(logging.INFO)
 
