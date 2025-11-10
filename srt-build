@@ -22,127 +22,6 @@ from shutil import copyfile, copytree
 from subprocess import run, Popen, PIPE, STDOUT
 import multiprocessing
 
-system_config = {
-    'base-build-path': '/home/wagi/build',
-    'base-tool-path': '/home/wagi/rt/drk',
-    'jobfiles-path': '/home/wagi/tmp',
-    'result-path': '/home/wagi/tmp/results'
-}
-
-# base-tool-patch +
-kernel_config = {
-    'nobase':  [''],
-    '':	       ['config-base'],
-    'sle':     ['config-sle'],
-    'slert':   ['config-sle',
-                'config-base-rt',
-                'config-rcu',
-                'rt/config-rt-trace' ],
-    'rt':      ['config-base-rt',
-                'config-rcu',
-                'rt/config-rt-trace'],
-    'rtb':     ['config-base-rt',
-                'config-rcu',
-                'rt/config-rtb'],
-    'up':      ['rt/config-up'],
-    'vp':      ['rt/config-vp'],
-    'll':      ['rt/config-ll'],
-    'nohz':    ['rt/config-nohz'],
-    'none':    ['rt/config-none'],
-    'blktests':['config-blktests'],
-    'nvme':    ['config-nvme'],
-}
-
-machine_config = {
-    # monom lab
-    # slot 1
-    'bbb' : {
-        'hostname': 'bbb',
-        'cmdline': ('console=ttyO0,115200n8 root=/dev/nfs '
-                    + 'rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp '
-                    + 'ip=dhcp earlyprintk printk.time=y mitigations=off'),
-        'rootfs': 'bbb',
-        'image': 'arch/arm/boot/zImage',
-        'target': 'zImage',
-        'defconfig': 'omap2plus_defconfig',
-        'config': 'bbb/config-min',
-        'dtb': 'arch/arm/boot/dts/am335x-boneblack.dtb',
-        'dtb': 'arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb',
-        'CROSS_COMPILE': 'arm-linux-gnu-',
-        'ARCH': 'arm',
-        'install': { 'default': ('scp arch/arm/boot/zImage bbb:/tmp ; ' +
-                                 'scp arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb bbb:/tmp'),
-                     'lava': ('scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/bbb/bbb-image{}; ' +
-                                 'scp arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb root@lava:/srv/www/htdocs/artifacts/bbb/')},
-    },
-
-    # slot 2
-    'c2d' : {
-        'hostname': 'c2d',
-        'cmdline': ('console=ttyS0,115200n8 root=/dev/nfs '
-                    + 'rw nfsroot=192.168.60.5:/srv/nfs/{rootfs},nfsvers=3,tcp '
-                    + 'ip=dhcp earlyprintk printk.time=y oops=panic panic_on_warn '
-                    + 'mitigations=off'),
-#                    + 'netconsole=6635@192.168.19.52/eth0,6652@192.168.19.2/'),
-#                    + 'rw nfsroot=192.168.19.2:/srv/nfs/{rootfs},vers=3 '
-        'rootfs': 'c2d',
-        'image': 'arch/x86_64/boot/bzImage',
-        'target': 'bzImage',
-        'defconfig': 'x86_64_defconfig',
-        'config': 'c2d/config-min',
-        #'CC': '/home/wagi/downloads/x86-64-core-i7--glibc--stable-2020.08-1/bin/x86_64-buildroot-linux-gnu-gcc',
-        #'CC': 'gcc-7',
-        'CC': 'gcc',
-        'install': {'default': ' scp arch/x86_64/boot/bzImage c2d:/tmp',
-                    'lava': 'scp arch/x86_64/boot/bzImage root@lava:/srv/www/htdocs/artifacts/c2d/c2d-image{}'}
-    },
-
-    # slot 3
-    # slot 4
-    # slot 5
-    'rpi3-32' : {
-        'hostname': 'rpi3-32',
-        'cmdline': ('console=ttyO0,115200n8 root=/dev/nfs '
-                    + 'rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp '
-                    + 'ip=dhcp earlyprintk printk.time=y mitigations=off'),
-        'rootfs': 'rpi3-32',
-        'image': 'arch/arm/boot/Image',
-        'target': 'zImage',
-        'defconfig': 'bcm2835_defconfig',
-        'config': 'rpi3-32/config-min',
-        'dtb': 'arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb',
-        'CROSS_COMPILE': 'arm-linux-gnu-',
-        'ARCH': 'arm',
-        'install': { 'default': ('scp arch/arm/boot/zImage rpi3-32:/tmp ; ' +
-                                 'scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb rpi3-32:/tmp'),
-                     'tftp': ('scp arch/arm/boot/zImage root@lava:/srv/tftp/rpi3-32-image ; ' +
-                             'scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp'),
-                     'lava': ('scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/rpi3-32/rpi3-32-image{} ; ' +
-                                 'scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb root@lava:/srv/www/htdocs/artifacts/rpi3-32')},
-    },
-
-    # slot 6
-    'rpi3-64' : {
-        'hostname': 'rpi3-64',
-        'cmdline': ('console=ttyO0,115200n8 root=/dev/nfs '
-                    + 'rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp '
-                    + 'ip=dhcp earlyprintk printk.time=y'),
-        'rootfs': 'rpi3-64',
-        'image': 'arch/arm64/boot/Image',
-        'target': 'Image',
-        'defconfig': 'defconfig',
-        'config': 'rpi3-64/config-min',
-        'dtb': 'arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb',
-        'CROSS_COMPILE': 'aarch64-linux-gnu-',
-        'ARCH': 'arm64',
-        'install': { 'default': ('scp arch/arm64/boot/Image rpi3-64:/tmp ; ' +
-                                 'scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb rpi3-64:/tmp'),
-                     'tftp': ('scp arch/arm64/boot/Image lava:/srv/tftp/rpi3-64-image ; ' +
-                             'scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp'),
-                     'lava': ('scp arch/arm64/boot/Image root@lava:/srv/www/htdocs/artifacts/rpi3-64/rpi3-64-image{} ; ' +
-                                 'scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb root@lava:/srv/www/htdocs/artifacts/rpi3-64')},
-    },
-}
 
 ##############################
 
@@ -356,13 +235,57 @@ def convert_to_seconds(string):
         return seconds * 60
     return seconds
 
+# Try loading a YAML config from several candidate locations and override defaults.
+_config_candidates = [
+    os.path.join(os.path.dirname(__file__), 'config.yml'),
+    os.path.join(os.getcwd(), 'config.yml'),
+    os.path.expanduser('~/.config/srt-build/config.yml'),
+]
+
+_loaded_cfg = {}
+for _p in _config_candidates:
+    try:
+        if os.path.exists(_p):
+            with open(_p, 'r') as _f:
+                try:
+                    _loaded_cfg = yaml.safe_load(_f) or {}
+                    break
+                except yaml.YAMLError as exc:
+                    warning('failed to parse %s: %s', _p, exc)
+    except Exception as exc:
+        warning('error while attempting to open %s: %s', _p, exc)
+
+# override in-file defaults if user config provides entries
+system_config = _loaded_cfg.get('system_config', system_config)
+kernel_config = _loaded_cfg.get('kernel_config', kernel_config)
+machine_config = _loaded_cfg.get('machine_config', machine_config)
+
 def load_job_ctx(filename):
     job_ctx = {}
-    with open(filename, 'r') as stream:
+    basename = os.path.basename(filename)
+    candidates = [
+        filename,
+        os.path.join(os.getcwd(), basename),
+        os.path.join(os.path.dirname(__file__), basename),
+        os.path.expanduser(os.path.join('~', '.config', 'srt-build', basename)),
+    ]
+
+    for path in candidates:
         try:
-            job_ctx = yaml.load(stream, Loader=yaml.FullLoader)
-        except yaml.YAMLError as exc:
-            print(exc)
+            if not os.path.exists(path):
+                continue
+            with open(path, 'r') as stream:
+                try:
+                    job_ctx = yaml.safe_load(stream) or {}
+                    return job_ctx
+                except yaml.YAMLError as exc:
+                    print(f"error parsing job ctx {path}: {exc}")
+                    return {}
+        except Exception as exc:
+            print(f"error reading {path}: {exc}")
+            continue
+
+    print(f"job context not found; tried: {candidates}")
     return job_ctx
 
 
