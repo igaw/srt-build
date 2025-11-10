@@ -47,12 +47,38 @@ class Context:
             self.__dict__['build_path'] = (
                 system_config['base-build-path'] + '/' + self.hostname
             )
-        self.__dict__['config_path'] = (
-            system_config['base-tool-path'] + '/' + 'configs'
+        # Resolve config_path with priority:
+        # 1. repository root ./configs
+        # 2. package sibling ../configs
+        # 3. fallback system_config['base-tool-path']/configs
+        repo_configs = os.path.abspath(os.path.join(os.getcwd(), 'configs'))
+        pkg_configs = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', 'configs')
         )
-        self.__dict__['job_path'] = (
-            system_config['base-tool-path'] + '/' + 'jobs'
+        fallback_configs = os.path.abspath(
+            os.path.join(system_config['base-tool-path'], 'configs')
         )
+        if os.path.isdir(repo_configs):
+            self.__dict__['config_path'] = repo_configs
+        elif os.path.isdir(pkg_configs):
+            self.__dict__['config_path'] = pkg_configs
+        else:
+            self.__dict__['config_path'] = fallback_configs
+
+        # Resolve job_path with same priority ordering as configs
+        repo_jobs = os.path.abspath(os.path.join(os.getcwd(), 'jobs'))
+        pkg_jobs = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', 'jobs')
+        )
+        fallback_jobs = os.path.abspath(
+            os.path.join(system_config['base-tool-path'], 'jobs')
+        )
+        if os.path.isdir(repo_jobs):
+            self.__dict__['job_path'] = repo_jobs
+        elif os.path.isdir(pkg_jobs):
+            self.__dict__['job_path'] = pkg_jobs
+        else:
+            self.__dict__['job_path'] = fallback_jobs
 
     def __getattr__(self, name):
         if name not in self.__dict__:

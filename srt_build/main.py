@@ -64,9 +64,8 @@ def main():
     parser = create_parser()
     args = parser.parse_args(sys.argv[1:])
 
-    # Commands that require being in a kernel source directory
+    # Determine if kernel source directory is required for this invocation
     kernel_commands = [
-        cmd_config.cmd_config,
         cmd_build.cmd_build,
         cmd_install.cmd_install,
         cmd_lava.cmd_lava,
@@ -74,9 +73,12 @@ def main():
         cmd_kexec.cmd_kexec,
         cmd_all.cmd_all,
     ]
+    need_kernel_source = (
+        (args.func in kernel_commands) or
+        (args.func == cmd_config.cmd_config and not getattr(args, 'list', False))
+    )
 
-    # Check if we're in a kernel source directory for commands that need it
-    if args.func in kernel_commands:
+    if need_kernel_source:
         check_kernel_source_directory()
 
     # Setup logging and event loop
