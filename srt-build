@@ -109,7 +109,7 @@ async def run_cmd_async(cmd, cwd=None):
 
 def run_cmd(cmd, cwd=None):
     debug(cmd)
-    loop = asyncio.get_event_loop_policy().get_event_loop()
+    loop = asyncio.get_event_loop()
     (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
     if ret:
         sys.exit(1)
@@ -122,11 +122,22 @@ def interruption():
         task.cancel()
 
 def _atexit_handler():
-    loop = asyncio.get_event_loop_policy().get_event_loop()
-    if loop.is_closed():
-        return
-    loop.run_until_complete(loop.shutdown_asyncgens())
-    loop.close()
+    try:
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if loop.is_closed():
+            return
+        pending = asyncio.all_tasks(loop)
+        if pending:
+            for task in pending:
+                task.cancel()
+            try:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception as exc:
+                warning('Exception during pending task cancellation: %s', exc)
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+    except Exception as exc:
+        warning('Exception during atexit event loop shutdown: %s', exc)
 
 def create_logger():
     log = logging.getLogger(__name__)
