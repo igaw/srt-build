@@ -1,0 +1,945 @@
+#!/usr/bin/env python
+# SPDX-License-Identifier: GPL-2.0-only
+
+import logging
+from logging import info, warning, debug, error
+import json
+import urllib.request
+import tempfile
+import asyncio
+import signal
+import atexit
+import argparse
+import sys
+import os
+import re
+import concurrent.futures
+import jinja2
+import yaml
+from pprint import pprint, pformat
+from time import sleep
+from shutil import copyfile, copytree
+from subprocess import run, Popen, PIPE, STDOUT
+import multiprocessing
+
+system_config = {
+    'base-build-path': '/home/wagi/build',
+    'base-tool-path': '/home/wagi/rt/drk',
+    'jobfiles-path': '/home/wagi/tmp',
+    'result-path': '/home/wagi/tmp/results'
+}
+
+# base-tool-patch +
+kernel_config = {
+    'nobase':  [''],
+    '':	       ['config-base'],
+    'sle':     ['config-sle'],
+    'slert':   ['config-sle',
+                'config-base-rt',
+                'config-rcu',
+                'rt/config-rt-trace' ],
+    'rt':      ['config-base-rt',
+                'config-rcu',
+                'rt/config-rt-trace'],
+    'rtb':     ['config-base-rt',
+                'config-rcu',
+                'rt/config-rtb'],
+    'up':      ['rt/config-up'],
+    'vp':      ['rt/config-vp'],
+    'll':      ['rt/config-ll'],
+    'nohz':    ['rt/config-nohz'],
+    'none':    ['rt/config-none'],
+    'blktests':['config-blktests'],
+    'nvme':    ['config-nvme'],
+}
+
+machine_config = {
+    # monom lab
+    # slot 1
+    'bbb' : {
+        'hostname': 'bbb',
+        'cmdline': ('console=ttyO0,115200n8 root=/dev/nfs '
+                    + 'rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp '
+                    + 'ip=dhcp earlyprintk printk.time=y mitigations=off'),
+        'rootfs': 'bbb',
+        'image': 'arch/arm/boot/zImage',
+        'target': 'zImage',
+        'defconfig': 'omap2plus_defconfig',
+        'config': 'bbb/config-min',
+        'dtb': 'arch/arm/boot/dts/am335x-boneblack.dtb',
+        'dtb': 'arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb',
+        'CROSS_COMPILE': 'arm-linux-gnu-',
+        'ARCH': 'arm',
+        'install': { 'default': ('scp arch/arm/boot/zImage bbb:/tmp ; ' +
+                                 'scp arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb bbb:/tmp'),
+                     'lava': ('scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/bbb/bbb-image{}; ' +
+                                 'scp arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb root@lava:/srv/www/htdocs/artifacts/bbb/')},
+    },
+
+    # slot 2
+    'c2d' : {
+        'hostname': 'c2d',
+        'cmdline': ('console=ttyS0,115200n8 root=/dev/nfs '
+                    + 'rw nfsroot=192.168.60.5:/srv/nfs/{rootfs},nfsvers=3,tcp '
+                    + 'ip=dhcp earlyprintk printk.time=y oops=panic panic_on_warn '
+                    + 'mitigations=off'),
+#                    + 'netconsole=6635@192.168.19.52/eth0,6652@192.168.19.2/'),
+#                    + 'rw nfsroot=192.168.19.2:/srv/nfs/{rootfs},vers=3 '
+        'rootfs': 'c2d',
+        'image': 'arch/x86_64/boot/bzImage',
+        'target': 'bzImage',
+        'defconfig': 'x86_64_defconfig',
+        'config': 'c2d/config-min',
+        #'CC': '/home/wagi/downloads/x86-64-core-i7--glibc--stable-2020.08-1/bin/x86_64-buildroot-linux-gnu-gcc',
+        #'CC': 'gcc-7',
+        'CC': 'gcc',
+        'install': {'default': ' scp arch/x86_64/boot/bzImage c2d:/tmp',
+                    'lava': 'scp arch/x86_64/boot/bzImage root@lava:/srv/www/htdocs/artifacts/c2d/c2d-image{}'}
+    },
+
+    # slot 3
+    # slot 4
+    # slot 5
+    'rpi3-32' : {
+        'hostname': 'rpi3-32',
+        'cmdline': ('console=ttyO0,115200n8 root=/dev/nfs '
+                    + 'rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp '
+                    + 'ip=dhcp earlyprintk printk.time=y mitigations=off'),
+        'rootfs': 'rpi3-32',
+        'image': 'arch/arm/boot/Image',
+        'target': 'zImage',
+        'defconfig': 'bcm2835_defconfig',
+        'config': 'rpi3-32/config-min',
+        'dtb': 'arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb',
+        'CROSS_COMPILE': 'arm-linux-gnu-',
+        'ARCH': 'arm',
+        'install': { 'default': ('scp arch/arm/boot/zImage rpi3-32:/tmp ; ' +
+                                 'scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb rpi3-32:/tmp'),
+                     'tftp': ('scp arch/arm/boot/zImage root@lava:/srv/tftp/rpi3-32-image ; ' +
+                             'scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp'),
+                     'lava': ('scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/rpi3-32/rpi3-32-image{} ; ' +
+                                 'scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb root@lava:/srv/www/htdocs/artifacts/rpi3-32')},
+    },
+
+    # slot 6
+    'rpi3-64' : {
+        'hostname': 'rpi3-64',
+        'cmdline': ('console=ttyO0,115200n8 root=/dev/nfs '
+                    + 'rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp '
+                    + 'ip=dhcp earlyprintk printk.time=y'),
+        'rootfs': 'rpi3-64',
+        'image': 'arch/arm64/boot/Image',
+        'target': 'Image',
+        'defconfig': 'defconfig',
+        'config': 'rpi3-64/config-min',
+        'dtb': 'arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb',
+        'CROSS_COMPILE': 'aarch64-linux-gnu-',
+        'ARCH': 'arm64',
+        'install': { 'default': ('scp arch/arm64/boot/Image rpi3-64:/tmp ; ' +
+                                 'scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb rpi3-64:/tmp'),
+                     'tftp': ('scp arch/arm64/boot/Image lava:/srv/tftp/rpi3-64-image ; ' +
+                             'scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp'),
+                     'lava': ('scp arch/arm64/boot/Image root@lava:/srv/www/htdocs/artifacts/rpi3-64/rpi3-64-image{} ; ' +
+                                 'scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb root@lava:/srv/www/htdocs/artifacts/rpi3-64')},
+    },
+}
+
+##############################
+
+class LogOutput:
+    def __init__(self):
+        self.stdout = []
+        self.stderr = []
+
+    async def log_stdout(self, line):
+        debug(line.rstrip())
+        self.stdout.append(line)
+
+    async def log_stderr(self, line):
+        error(line.rstrip())
+        self.stderr.append(line)
+
+
+async def _read_stream(stream, callback):
+    while True:
+        line = await stream.readline()
+        try:
+            line = line.decode('utf-8')
+        except UnicodeDecodeError as err:
+            warning('Could not decode line from stream: %s', err)
+            continue
+
+        if line:
+            await callback(line)
+        else:
+            break
+
+async def run_cmd_async(cmd, cwd=None):
+    cmdstr = ' '.join(cmd)
+    debug('$ %s', cmdstr)
+
+    logo = LogOutput()
+
+    process = await asyncio.create_subprocess_shell(
+        cmdstr,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd)
+
+    await asyncio.wait([
+        asyncio.create_task(_read_stream(process.stdout, logo.log_stdout)),
+        asyncio.create_task(_read_stream(process.stderr, logo.log_stderr))])
+    ret = await process.wait()
+
+    return (ret, ''.join(logo.stdout))
+
+def run_cmd(cmd, cwd=None):
+    debug(cmd)
+    loop = asyncio.get_event_loop_policy().get_event_loop()
+    (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
+    if ret:
+        sys.exit(ret)
+    return (ret, output)
+
+
+def interruption():
+    for task in asyncio.all_tasks():
+        print(task)
+        task.cancel()
+
+def _atexit_handler():
+    loop = asyncio.get_event_loop_policy().get_event_loop()
+    if loop.is_closed():
+        return
+    loop.run_until_complete(loop.shutdown_asyncgens())
+    loop.close()
+
+def create_logger():
+    log = logging.getLogger()  # root logger
+    log.setLevel(logging.INFO)
+    format_str = '%(asctime)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    formatter = logging.Formatter(format_str, date_format)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    log.addHandler(stream_handler)
+    return logging.getLogger(__name__)
+
+def setup():
+    create_logger()
+    logging.getLogger('asyncio').setLevel(logging.INFO)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, interruption)
+    atexit.register(_atexit_handler)
+
+
+#######################################
+
+class Context():
+    def __init__(self, args):
+        self.__dict__ = machine_config[args.MACHINE]
+        self.__dict__['args'] = args
+        if args.builddir:
+            self.__dict__['build_path'] = args.builddir
+        else:
+            self.__dict__['build_path'] = (system_config['base-build-path'] + '/' +
+                                           self.hostname)
+        self.__dict__['config_path'] = (system_config['base-tool-path'] + '/' +
+                                        'configs')
+        self.__dict__['job_path'] = (system_config['base-tool-path'] + '/' +
+                                     'jobs')
+
+
+    def __getattr__(self, name):
+        if name not in self.__dict__:
+            return None
+        return self.__dict__[name]
+
+
+def run_make(ctx, cmd):
+    ipath = ctx.build_path + '/mods'
+    makecmd = ['INSTALL_MOD_PATH='+ipath, 'make', 'O=' + ctx.build_path]
+    if ctx.CROSS_COMPILE:
+        makecmd += ['CROSS_COMPILE=' + ctx.CROSS_COMPILE]
+        makecmd += ['ARCH=' + ctx.ARCH]
+    if ctx.CC:
+        makecmd += ['CC='+ctx.CC]
+    return run_cmd(makecmd + cmd)
+
+
+def cmd_config(ctx):
+    if not ctx.args.config:
+        run_make(ctx, [ctx.defconfig])
+        #run_make(ctx, ['kvmconfig'])
+
+        cfgs = [ctx.config_path + '/' + ctx.config]
+        for c in kernel_config[ctx.args.config_base]:
+            cfgs += [ctx.config_path + '/' + c]
+        if ctx.args.flavor:
+            for c in kernel_config[ctx.args.flavor]:
+                cfgs += [ctx.config_path + '/' + c]
+
+        for cfg in cfgs:
+            run_cmd(['scripts/kconfig/merge_config.sh',
+                           '-m', '-O', ctx.build_path,
+                           ctx.build_path + '/.config',
+                           cfg])
+            run_make(ctx, ['olddefconfig'])
+    else:
+        # use provided config as base
+        copyfile(ctx.args.config, ctx.build_path + '/.config')
+        # add machine config
+        cfgs = [ctx.config_path + '/' + ctx.config]
+        for c in kernel_config[ctx.args.config_base]:
+            cfgs += [ctx.config_path + '/' + c]
+        for cfg in cfgs:
+            run_cmd(['scripts/kconfig/merge_config.sh',
+                           '-m', '-O', ctx.build_path,
+                           ctx.build_path + '/.config',
+                           cfg])
+            run_make(ctx, ['olddefconfig'])
+
+def cmd_build(ctx):
+    cmd = ['-j' + str(multiprocessing.cpu_count()), ctx.target]
+    if ctx.target == 'uImage':
+        cmd.append('LOADADDR={}'.format(ctx.loadaddr))
+    (ret, _) = run_make(ctx, cmd)
+    if ret:
+        error('build failed')
+        return ret
+    if ctx.dtb:
+        (ret, _) = run_make(ctx, ['-j' + str(multiprocessing.cpu_count()),
+                                        'dtbs'])
+        if ret:
+            return ret
+    if ctx.dtb_cmd:
+        (ret, _) = run_cmd(ctx.dtb_cmd.split(), cwd=ctx.build_path)
+
+    if ctx.args.mods:
+        cmd = ['-j' + str(multiprocessing.cpu_count()), 'modules']
+        (ret, _) = run_make(ctx, cmd)
+        if ret:
+            error('modules')
+            return ret
+        (ret, _) = run_make(ctx, ['modules_install'])
+        if ret:
+            error('module_install failed')
+    return ret
+
+
+def cmd_install(ctx):
+    dest = 'default'
+    if ctx.args.dest:
+        dest = ctx.args.dest
+    postfix = ''
+    if ctx.args.postfix:
+        postfix = ctx.args.postfix
+    cmd = ctx.install[dest]
+    cmd = cmd.format(postfix)
+    run_cmd(cmd.split(), cwd=ctx.build_path)
+
+
+def convert_to_seconds(string):
+    digits = re.compile(r'^\d+')
+    value = digits.match(string).group(0)
+    postfix = string[len(value):]
+    seconds = int(value)
+    if postfix == 'd':
+        return seconds * 24 * 60 * 60
+    if postfix == 'h':
+        return seconds * 60 * 60
+    if postfix == 'm':
+        return seconds * 60
+    return seconds
+
+def load_job_ctx(filename):
+    job_ctx = {}
+    with open(filename, 'r') as stream:
+        try:
+            job_ctx = yaml.load(stream, Loader=yaml.FullLoader)
+        except yaml.YAMLError as exc:
+            print(exc)
+    return job_ctx
+
+
+def generate_job(job_path, filename, job_ctx):
+    with open(filename, "r") as details:
+        data = details.read()
+    string_loader = jinja2.DictLoader({filename: data})
+    type_loader = jinja2.FileSystemLoader([job_path])
+    loader = jinja2.ChoiceLoader([string_loader, type_loader])
+    env = jinja2.Environment(loader=loader, trim_blocks=True, autoescape=False)
+    job_template = env.get_template(filename)
+
+    return job_template.render(**job_ctx)
+
+
+def generate_file(job, testname, devicename):
+    filename = 'test-{}-{}.yaml'.format(testname, devicename)
+    with open(filename, 'w') as f:
+        f.write(job)
+    return [ filename ]
+
+
+def generate_split_files(td, job, devicename, duration):
+    split_files = []
+
+    job = yaml.load(job, Loader=yaml.FullLoader)
+
+    idx = 0
+    for val in job['actions']:
+        if 'test' in val.keys():
+            break
+        idx = idx + 1
+
+    tests = job['actions'][idx]['test']['definitions']
+
+    timeout = None
+    if 'timeout' in job['timeouts']['action']:
+        timeout = job['timeouts']['action']
+    if 'timeout' in job['actions'][idx]['test']:
+        timeout = job['actions'][idx]['test']['timeout']
+
+    if duration:
+        # add grace period of 2 minutes to make sure shell script
+        # in lava is able run
+        timeout = { 'seconds': duration + 120 }
+
+    for t in tests:
+        if 'parameters' in t and 'DURATION' in t['parameters']:
+            if duration:
+                # overwrite duration from job file template with
+                # the value provided from the command line
+                t['parameters']['DURATION'] = '{}s'.format(duration)
+            else:
+                duration = convert_to_seconds(t['parameters']['DURATION'])
+            timeout = { 'seconds': duration + 120 }
+
+            if int(job['timeouts']['action']['minutes']) * 60 < duration:
+                job['timeouts']['action']['minutes'] = int(duration / 60) + 5
+            if int(job['timeouts']['job']['minutes']) * 60 < duration:
+                job['timeouts']['job']['minutes'] = int(duration / 60) + 5
+            if int(job['timeouts']['connection']['minutes']) * 60 < duration:
+                job['timeouts']['connection']['minutes'] = int(duration / 60) + 5
+
+        action = {}
+        action['test'] = {}
+        action['test']['definitions'] = [ t ]
+        if timeout:
+            action['test']['timeout'] = timeout
+
+        job['actions'][idx] = action
+
+        filename = '{}/test-{}-{}.yaml'.format(td, t['name'], devicename)
+        with open(filename, 'w') as f:
+            yaml.dump(job, f, default_flow_style=False)
+        split_files.append(filename)
+
+    return split_files
+
+
+def cmd_lava(ctx):
+    ctx.args.config = ''
+
+    flavors = ['rt', 'nohz', 'vp', 'll', 'up']
+    if ctx.args.flavors:
+        flavors = ctx.args.flavors.split(' ,')
+
+    duration = None
+    if ctx.args.duration:
+        duration = convert_to_seconds(ctx.args.duration)
+
+    jobs = []
+
+    for fl in flavors:
+        ctx.args.dest = 'lava'
+        ctx.args.postfix = '-' + fl
+        (res, ref) = run_cmd(['git', 'describe'])
+        if not res:
+            ctx.args.postfix += '-' + ref
+
+        if not ctx.args.skip_build:
+            ctx.args.flavor = fl
+            cmd_config(ctx)
+            cmd_build(ctx)
+            cmd_install(ctx)
+
+        with tempfile.TemporaryDirectory() as td:
+            job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
+            job_ctx['kernel_url'] += ctx.args.postfix
+            job_ctx['tags'] = [ ctx.hostname ]
+
+            testpath = ctx.job_path + '/' + fl
+            if ctx.args.testsuites:
+                testpath = testpath + '/' + ctx.args.testsuites
+            for file in sorted(os.listdir(testpath)):
+                if not file.endswith('.jinja2'):
+                    continue
+
+                filename = testpath + '/' + file
+                job = generate_job(ctx.job_path, filename, job_ctx)
+
+                j = yaml.load(job, Loader=yaml.FullLoader)
+                if ctx.args.tests and j['job_name'] != ctx.args.tests:
+                    continue
+
+                files = generate_split_files(td, job, ctx.hostname, duration)
+                for j in files:
+                    (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
+                    jobs.append(str(res).strip())
+
+            copytree(td, '/home/wagi/tmp/jobs', dirs_exist_ok=True)
+
+    if jobs == []:
+        print('no jobs')
+        return
+    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
+                                            ctx.args.MACHINE), 'a') as f:
+        f.write('{}: '.format(jobs[0]))
+        f.write(' '.join(jobs))
+        f.write('\n')
+
+    print('job id: {}'.format(jobs[0]))
+
+
+def cmd_smoke(ctx):
+    duration = convert_to_seconds(ctx.args.duration)
+
+    jobs = []
+
+    ctx.args.dest = 'lava'
+    ctx.args.postfix = ''
+    cmd_install(ctx)
+
+    with tempfile.TemporaryDirectory() as td:
+        job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
+        job_ctx['tags'] = [ ctx.hostname ]
+        testname = 'job-smoke-tests'
+        filename = ctx.job_path + '/' + testname + '.jinja2'
+        job = generate_job(ctx.job_path, filename, job_ctx)
+        files = generate_split_files(td, job, ctx.hostname, duration)
+        for j in files:
+            (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
+            jobs.append(str(res).strip())
+
+    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
+                                            ctx.args.MACHINE), 'a') as f:
+        f.write('{}: '.format(jobs[0]))
+        f.write(' '.join(jobs))
+        f.write('\n')
+
+    print('job id: {}'.format(jobs[0]))
+
+
+def get_jobs(machine, job_id, batch=False):
+    if not batch:
+        return [int(job_id)]
+
+    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
+                                            machine), 'r') as f:
+        for l in f.readlines():
+            try:
+                id = l.split(':')[0]
+                n = int(id)
+            except:
+                continue
+            if id and n == job_id:
+                return [ int(x.strip()) for x in l.split(":")[1].split(' ') if x]
+    return [int(job_id)]
+
+
+def get_job_list(ctx):
+    jobs = []
+    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
+                                            ctx.args.MACHINE), 'r') as f:
+        for l in f.readlines():
+            try:
+                id = int(l.split(':')[0])
+            except:
+                continue
+            jobs.append(id)
+    return jobs
+
+
+def cmd_jobs_list(ctx):
+    for id in get_job_list(ctx):
+        print(id)
+
+
+def handle_rt_results(test, job_ctx):
+    class bcolors:
+        HEADER = '\033[95m'
+        OKBLUE = '\033[94m'
+        OKGREEN = '\033[92m'
+        WARNING = '\033[93m'
+        FAIL = '\033[91m'
+        ENDC = '\033[0m'
+        BOLD = '\033[1m'
+        UNDERLINE = '\033[4m'
+
+    try:
+        measurement = float(test['measurement'])
+    except:
+        measurement = 0.0
+
+    max_latency = -1
+    name = test['suite'].split('_')[-1]
+    name = name.replace('-', '_')
+    if job_ctx and name in job_ctx:
+        if job_ctx[name] and 'max_latency' in job_ctx[name]:
+            max_latency = int(job_ctx[name]['max_latency'])
+
+    if test['result'] == 'pass':
+        passed = True
+    else:
+        passed = False
+
+    if test['name'].endswith('max-latency') and measurement >= max_latency:
+        passed = False
+
+    if passed:
+        result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
+    else:
+        result = bcolors.FAIL + 'fail' + bcolors.ENDC
+    print('  {:5} {:20} {:20}: {} {:>10.2f}'.format(
+        test['job'], test['suite'], test['name'], result, measurement))
+
+rt_suites = ['0_jd-hackbench',
+             '0_jd-compile',
+             '0_jd-stress_ptrace',
+             '0_cyclicdeadline',
+             '0_cyclictest',
+             '0_pi-stress',
+             '0_pmqtest',
+             '0_ptsematest',
+             '0_rt-migrate-test',
+             '0_signaltest',
+             '0_sigwaittest',
+             '0_svsematest',
+             '0_rtla-osnoise',
+             '0_rtla-timelat']
+suites = ['0_smoke-tests']
+
+def job_result_print(jobid, job_ctx, metadata, result, download=False):
+    class bcolors:
+        HEADER = '\033[95m'
+        OKBLUE = '\033[94m'
+        OKGREEN = '\033[92m'
+        WARNING = '\033[93m'
+        FAIL = '\033[91m'
+        ENDC = '\033[0m'
+        BOLD = '\033[1m'
+        UNDERLINE = '\033[4m'
+
+    if not result:
+        print('   {:5} no results'.format(jobid))
+        return
+
+    try:
+        res_ctx = yaml.load(result, Loader=yaml.FullLoader)
+    except yaml.YAMLError as exc:
+        pprint(exc)
+        return
+
+    for test in res_ctx:
+        debug(pformat(test))
+        if test['suite'] in rt_suites:
+            handle_rt_results(test, job_ctx)
+        elif test['suite'] in suites:
+            result = ''
+            if test['result'] == 'pass':
+                result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
+            else:
+                result = bcolors.FAIL + 'fail' + bcolors.ENDC
+            print('  {:5} {:20} {:20}: {}'.format(
+                test['job'], test['suite'], test['name'], result))
+        elif test['result'] == 'fail':
+            result = bcolors.FAIL + 'fail' + bcolors.ENDC
+            print('  {:5} {:20} {:20}: {}'.format(
+                test['job'], test['suite'], test['name'], result))
+
+        if 'test-attachment' == test['name']:
+            if 'reference' not in test['metadata']:
+                continue
+            if download:
+                url = test['metadata']['reference']
+                # print('  {:5} {}'.format(test['job'], url))
+
+                data = None
+                with urllib.request.urlopen(url) as f:
+                    data = f.read().decode('utf-8')
+
+                d = json.loads(data)
+                fname = '{}/{}/{}/{}/{}/{}.json'.format(system_config['result-path'],
+                                                     metadata['host'],
+                                                     d['sysinfo']['release'],
+                                                     test['suite'][2:],
+                                                     test['job'],
+                                                     test['suite'][2:])
+                os.makedirs(os.path.dirname(fname), exist_ok=True)
+                print('  {:5} {}'.format(test['job'], fname))
+                with open(fname, 'w') as outfile:
+                    outfile.write(data)
+
+def get_job_context(id, ctx):
+    data = {}
+    try:
+        (_, res) = run_cmd(['lavacli', 'jobs', 'show', '--yaml', str(id)])
+        job = yaml.load(res, Loader=yaml.FullLoader)
+        host = job['device'].split('-')[0]
+        data['host'] = host
+        data['description'] = job['description']
+        job_ctx = load_job_ctx(ctx.job_path + '/boards/' + host + '.yaml')
+        return (data, job_ctx)
+    except:
+        return None
+
+def cmd_jobs_results(ctx):
+    if not ctx.args.id:
+        jobs = get_job_list(ctx)
+        id = int(jobs[-1])
+        batch=True
+    else:
+        id = int(ctx.args.id)
+        batch=ctx.args.batch
+
+    metadata, job_ctx = get_job_context(id, ctx)
+    if not job_ctx:
+        return
+
+    if ctx.args.raw:
+        (_, res) = run_cmd(['lavacli', 'jobs', 'logs', str(id)])
+        version = re.compile(r'.*Linux version ([-0-9a-zA-Z\.]+)')
+        m = version.search(res, re.MULTILINE)
+        if m:
+            metadata['version'] = m.group(1)
+        else:
+            metadata['version'] = ''
+
+        (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(id)])
+
+        if ctx.args.host:
+            if metadata['host'] != ctx.args.host:
+                return
+        if ctx.args.description:
+            if metadata['description'] != ctx.args.description:
+                return
+        print('{host}\t{description}\t{version}'.format(**metadata))
+        job_result_print(id, job_ctx, metadata, res, ctx.args.download)
+        return
+
+    for j in get_jobs(ctx.args.MACHINE, id, batch):
+        (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(j)])
+        job_result_print(j, job_ctx, metadata, res, ctx.args.download)
+
+def get_result(jobid, result):
+    try:
+        job_ctx = yaml.load(result, Loader=yaml.FullLoader)
+    except yaml.YAMLError as exc:
+        pprint(exc)
+        return
+
+    table = []
+    for test in job_ctx:
+        debug(pformat(test))
+        if test['suite'] not in rt_suites and test['suite'] not in suites:
+            continue
+
+        try:
+            measurement = float(test['measurement'])
+        except:
+            measurement = 0.0
+
+        table.append([test['suite'], test['name'],
+                      test['result'], measurement])
+
+    return table
+
+def get_results(machine, id):
+    results = []
+    for j in get_jobs(machine, id, batch=False):
+        (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(j)])
+        results.extend(get_result(j, res))
+    return results
+
+
+def lookup_entry(table, suite, name):
+    for e in table:
+        if e[0] == suite and e[1] == name:
+            return e
+    return None
+
+
+def cmd_jobs_compare(ctx):
+    id1 = int(ctx.args.id1)
+    id2 = int(ctx.args.id2)
+
+    r1 = get_results(ctx.args.MACHINE, id1)
+    r2 = get_results(ctx.args.MACHINE, id2)
+
+    for e in r1:
+        c = lookup_entry(r2, e[0], e[1])
+        if not c:
+            continue
+        diff = 0
+        if c[3] != 0:
+            diff = (e[3] - c[3])/c[3] * 100
+        val = '{:>10.2f}/{:>10.2f}'.format(e[3], c[3])
+        print('  {:20} {:20} {:20} {:10} {:>10.2f}%'.format(
+            e[0], e[1], e[2] + '/' + c[2], val, diff))
+
+
+def cmd_jobs_cancel(ctx):
+    if not ctx.args.id:
+        jobs = get_job_list(ctx)
+        id = int(jobs[-1])
+    else:
+        id = int(ctx.args.id)
+
+    for j in get_jobs(ctx.args.MACHINE, id, batch=True):
+        print(j)
+        run(['lavacli', 'jobs', 'cancel', str(j)])
+
+
+def cmd_jobs(ctx):
+    print(ctx.args)
+
+
+def cmd_kexec(ctx):
+    run_cmd(ctx.install['default'].split(), cwd=ctx.build_path)
+
+    ssh_kexec = ['ssh', ctx.hostname]
+    if ctx.kexec:
+        ssh_kexec += ctx.kexec
+    else:
+        ssh_kexec += ['kexec']
+
+    rootfs = ctx.rootfs
+    if ctx.args.rootfs != '':
+        rootfs = ctx.args.rootfs
+    cmdline = ctx.cmdline.format(rootfs=rootfs)
+
+    ssh_kexec += ['--append=\\"' + cmdline + ' ' + ctx.args.append + '\\"' ]
+
+    if ctx.dtb:
+        ssh_kexec += [ '--dtb=' + '/tmp/' + os.path.basename(ctx.dtb) ]
+    ssh_kexec += ['/tmp/' + os.path.basename(ctx.image)]
+
+    run_cmd(ssh_kexec)
+
+
+def cmd_all(ctx):
+    cmd_config(ctx)
+    c = cmd_build(ctx)
+    if c:
+        return
+    cmd_kexec(ctx)
+
+
+def create_parse():
+    parser = argparse.ArgumentParser(description='srt - stable -rt tooling')
+    parser.add_argument('MACHINE')
+
+    parser.add_argument('-d', '--debug',
+                        action='store_true',
+                        help='Enable debug logging')
+    parser.add_argument('--append', default='')
+    parser.add_argument('--builddir', default=None)
+
+    subparser = parser.add_subparsers(help='sub command help', dest='cmd')
+
+    bcpsr = subparser.add_parser('config')
+    bcpsr.add_argument('--config')
+    bcpsr.add_argument('--config-base', default='')
+    bcpsr.add_argument('--flavor', default='')
+    bcpsr.set_defaults(func=cmd_config)
+
+    bpsr = subparser.add_parser('build')
+    bpsr.set_defaults(func=cmd_build)
+    bpsr.add_argument('--mods', default=False, action='store_true')
+
+    kpsg = subparser.add_parser('kexec')
+    kpsg.add_argument('--append', default='')
+    kpsg.add_argument('--rootfs', default='')
+    kpsg.set_defaults(func=cmd_kexec)
+
+    ipsg = subparser.add_parser('install')
+    ipsg.add_argument('--dest')
+    ipsg.add_argument('--postfix')
+    ipsg.set_defaults(func=cmd_install)
+
+    lpsg = subparser.add_parser('lava')
+    lpsg.add_argument('--skip-build', default=False,
+                      action='store_true')
+    lpsg.add_argument('--mods', default=False,
+                      action='store_true')
+    lpsg.add_argument('--duration', default=None)
+    lpsg.add_argument('--config-base', default='')
+    lpsg.add_argument('--tests')
+    lpsg.add_argument('--flavors')
+    lpsg.add_argument('--testsuites', default='smoke')
+    lpsg.set_defaults(func=cmd_lava)
+
+    spsg = subparser.add_parser('smoke')
+    spsg.add_argument('--duration', default='5m')
+    spsg.set_defaults(func=cmd_smoke)
+
+    jpsg = subparser.add_parser('jobs')
+    sjpsg = jpsg.add_subparsers(help='LAVA jobs commands')
+    lpsg = sjpsg.add_parser('list')
+    lpsg.set_defaults(func=cmd_jobs_list)
+    rpsg = sjpsg.add_parser('results')
+    rpsg.add_argument('id', nargs='?', default=None)
+    rpsg.set_defaults(func=cmd_jobs_results)
+    rpsg.add_argument('--raw', default=False,
+                      action='store_true')
+    rpsg.add_argument('--batch', default=False,
+                      action='store_true')
+    rpsg.add_argument('--kernel', default=False,
+                      action='store_true')
+    rpsg.add_argument('--download', default=False,
+                      action='store_true',
+                      help='download JSON result file')
+    rpsg.add_argument('--host')
+    rpsg.add_argument('--description')
+    kpsg = sjpsg.add_parser('compare')
+    kpsg.add_argument('id1', nargs='?')
+    kpsg.add_argument('id2', nargs='?')
+    kpsg.set_defaults(func=cmd_jobs_compare)
+    cpsg = sjpsg.add_parser('cancel')
+    cpsg.add_argument('id', nargs='?')
+    cpsg.set_defaults(func=cmd_jobs_cancel)
+    jpsg.set_defaults(func=cmd_jobs)
+
+    apsg = subparser.add_parser('all')
+    apsg.add_argument('--config')
+    apsg.add_argument('--config-base', default='')
+    apsg.add_argument('--append', default='')
+    apsg.add_argument('--flavor', default='')
+    apsg.add_argument('--rootfs', default='')
+    apsg.set_defaults(func=cmd_all)
+
+    return parser
+
+def main():
+    setup()
+    parser = create_parse()
+    args = parser.parse_args(sys.argv[1:])
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    if args.MACHINE not in machine_config:
+        error('No valid machine config found for "{}"'.format(args.MACHINE))
+        sys.exit(1)
+
+    ctx = Context(args)
+    args.func(ctx)
+
+if __name__ == "__main__":
+    main()
+
