@@ -122,7 +122,18 @@ def interruption():
         task.cancel()
 
 def _atexit_handler():
-    loop = asyncio.get_event_loop_policy().get_event_loop()
+    """
+    Cleanup handler to be called at program exit.
+
+    This function attempts to properly shutdown and close the asyncio event loop,
+    ensuring that all asynchronous generators are finalized. It is registered with
+    atexit to help prevent resource leaks or warnings about unclosed event loops.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        # No event loop in this thread
+        return
     if loop.is_closed():
         return
     loop.run_until_complete(loop.shutdown_asyncgens())
