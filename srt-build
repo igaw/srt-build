@@ -436,59 +436,55 @@ def generate_split_files(td, job, devicename, duration):
     return split_files
 
 
-def cmd_lava(ctx):
-    ensure_lavacli_available()
-    ctx.args.config = ''
-
+def _get_flavors(ctx):
     flavors = ['rt', 'nohz', 'vp', 'll', 'up']
     if ctx.args.flavors:
         flavors = ctx.args.flavors.split(' ,')
+    return flavors
 
-    duration = None
-    if ctx.args.duration:
-        duration = convert_to_seconds(ctx.args.duration)
 
-    jobs = []
+def _prepare_build_for_flavor(ctx, fl):
+    ctx.args.dest = 'lava'
+    ctx.args.postfix = '-' + fl
+    (res, ref) = run_cmd(['git', 'describe'])
+    if not res:
+        ctx.args.postfix += '-' + ref
 
-    for fl in flavors:
-        ctx.args.dest = 'lava'
-        ctx.args.postfix = '-' + fl
-        (res, ref) = run_cmd(['git', 'describe'])
-        if not res:
-            ctx.args.postfix += '-' + ref
 
-        if not ctx.args.skip_build:
-            ctx.args.flavor = fl
-            cmd_config(ctx)
-            cmd_build(ctx)
-            cmd_install(ctx)
+def _build_flavor(ctx, fl):
+    if not ctx.args.skip_build:
+        ctx.args.flavor = fl
+        cmd_config(ctx)
+        cmd_build(ctx)
+        cmd_install(ctx)
 
-        with tempfile.TemporaryDirectory() as td:
-            job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
-            job_ctx['kernel_url'] += ctx.args.postfix
-            job_ctx['tags'] = [ ctx.hostname ]
 
-            testpath = ctx.job_path + '/' + fl
-            if ctx.args.testsuites:
-                testpath = testpath + '/' + ctx.args.testsuites
-            for file in sorted(os.listdir(testpath)):
-                if not file.endswith('.jinja2'):
-                    continue
+def _get_testpath(ctx, fl):
+    testpath = ctx.job_path + '/' + fl
+    if ctx.args.testsuites:
+        testpath = testpath + '/' + ctx.args.testsuites
+    return testpath
 
-                filename = testpath + '/' + file
-                job = generate_job(ctx.job_path, filename, job_ctx)
 
-                j = yaml.safe_load(job)
-                if ctx.args.tests and j['job_name'] != ctx.args.tests:
-                    continue
+def _process_test_files(ctx, td, job_ctx, testpath, duration, jobs):
+    for file in sorted(os.listdir(testpath)):
+        if not file.endswith('.jinja2'):
+            continue
 
-                files = generate_split_files(td, job, ctx.hostname, duration)
-                for j in files:
-                    (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
-                    jobs.append(str(res).strip())
+        filename = testpath + '/' + file
+        job = generate_job(ctx.job_path, filename, job_ctx)
 
-            copytree(td, '/home/wagi/tmp/jobs', dirs_exist_ok=True)
+        j = yaml.safe_load(job)
+        if ctx.args.tests and j['job_name'] != ctx.args.tests:
+            continue
 
+        files = generate_split_files(td, job, ctx.hostname, duration)
+        for j in files:
+            (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
+            jobs.append(str(res).strip())
+
+
+def _save_job_ids(ctx, jobs):
     if jobs == []:
         print('no jobs')
         return
@@ -496,8 +492,36 @@ def cmd_lava(ctx):
         f.write(f'{jobs[0]}: ')
         f.write(' '.join(jobs))
         f.write('\n')
-
     print(f'job id: {jobs[0]}')
+
+
+def cmd_lava(ctx):
+    ensure_lavacli_available()
+    ctx.args.config = ''
+
+    flavors = _get_flavors(ctx)
+    duration = None
+    if ctx.args.duration:
+        duration = convert_to_seconds(ctx.args.duration)
+
+    jobs = []
+
+    for fl in flavors:
+        _prepare_build_for_flavor(ctx, fl)
+        _build_flavor(ctx, fl)
+
+        with tempfile.TemporaryDirectory() as td:
+            job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
+            job_ctx['kernel_url'] += ctx.args.postfix
+            job_ctx['tags'] = [ ctx.hostname ]
+
+            testpath = _get_testpath(ctx, fl)
+            _process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
+
+            copytree(td, '/home/wagi/tmp/jobs', dirs_exist_ok=True)
+
+    _save_job_ids(ctx, jobs)
+
 
 
 def cmd_smoke(ctx):
