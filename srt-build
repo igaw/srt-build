@@ -21,6 +21,16 @@ from subprocess import run
 import multiprocessing
 import shutil
 
+# Global color class for terminal output
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 system_config = {
     'base-build-path':  os.path.expanduser('~/.cache/srt-build/build'),
@@ -600,15 +610,6 @@ def cmd_jobs_list(ctx):
 
 
 def handle_rt_results(test, job_ctx):
-    class bcolors:
-        HEADER = '\033[95m'
-        OKBLUE = '\033[94m'
-        OKGREEN = '\033[92m'
-        WARNING = '\033[93m'
-        FAIL = '\033[91m'
-        ENDC = '\033[0m'
-        BOLD = '\033[1m'
-        UNDERLINE = '\033[4m'
 
     try:
         measurement = float(test['measurement'])
@@ -642,10 +643,6 @@ def handle_rt_results(test, job_ctx):
 
 def _get_color_result(passed):
     """Return colored result string based on pass/fail status."""
-    class bcolors:
-        OKGREEN = '\033[92m'
-        FAIL = '\033[91m'
-        ENDC = '\033[0m'
     
     if passed:
         return bcolors.OKGREEN + 'pass' + bcolors.ENDC
@@ -664,9 +661,6 @@ def _print_test_result(test, job_ctx):
 
 def handle_result_fail(test, job_ctx):
     """Default handler for failed test results."""
-    class bcolors:
-        FAIL = '\033[91m'
-        ENDC = '\033[0m'
     print(
         f'  {test.get("job", ""):5} {test.get("suite", ""):20} {test.get("name", ""):20}: '
         f'{bcolors.FAIL}fail{bcolors.ENDC}'
