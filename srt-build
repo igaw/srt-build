@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 import logging
-from logging import info, warning, debug, error
+from logging import warning, debug, error
 import json
 import urllib.request
 import tempfile
@@ -13,13 +13,11 @@ import argparse
 import sys
 import os
 import re
-import concurrent.futures
 import jinja2
 import yaml
 from pprint import pprint, pformat
-from time import sleep
 from shutil import copyfile, copytree
-from subprocess import run, Popen, PIPE, STDOUT, CalledProcessError
+from subprocess import run
 import multiprocessing
 import shutil
 
@@ -116,10 +114,14 @@ async def run_cmd_async(cmd, cwd=None):
 
 def run_cmd(cmd, cwd=None):
     debug(cmd)
-    loop = asyncio.get_event_loop()
-    (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
+    try:
+        loop = asyncio.get_event_loop()
+        (ret, output) = loop.run_until_complete(run_cmd_async(cmd, cwd=cwd))
+    except Exception as exc:
+        error(f'Exception while running command {cmd}: {exc}')
+        return (1, str(exc))
     if ret:
-        sys.exit(1)
+        error(f'Command failed: {cmd} (exit code {ret})')
     return (ret, output)
 
 
@@ -193,9 +195,9 @@ def ensure_lavacli_available():
 class Context():
     def __init__(self, args):
         # Validate that the machine exists in machine_config
-        if args.MACHINE not in machine_config:
-            raise KeyError(f'Machine "{args.MACHINE}" not found in machine_config')
-        mc = machine_config[args.MACHINE]
+        if args.machine not in machine_config:
+            raise KeyError(f'Machine "{args.machine}" not found in machine_config')
+        mc = machine_config[args.machine]
         self.__dict__.update(mc)
         self.__dict__['args'] = args
         if args.builddir:
@@ -330,13 +332,13 @@ def load_job_ctx(filename):
                     job_ctx = yaml.safe_load(stream) or {}
                     return job_ctx
                 except yaml.YAMLError as exc:
-                    print(f"error parsing job ctx {path}: {exc}")
+                    error(f"YAML parse error in job ctx {path}: {exc}")
                     return {}
         except Exception as exc:
-            print(f"error reading {path}: {exc}")
+            error(f"Error reading job context file {path}: {exc}")
             continue
 
-    print(f"job context not found; tried: {candidates}")
+    error(f"Job context not found; tried: {candidates}")
     return job_ctx
 
 
@@ -353,7 +355,7 @@ def generate_job(job_path, filename, job_ctx):
 
 
 def generate_file(job, testname, devicename):
-    filename = 'test-{}-{}.yaml'.format(testname, devicename)
+    filename = f'test-{testname}-{devicename}.yaml'
     with open(filename, 'w') as f:
         f.write(job)
     return [ filename ]
@@ -388,7 +390,7 @@ def generate_split_files(td, job, devicename, duration):
             if duration:
                 # overwrite duration from job file template with
                 # the value provided from the command line
-                t['parameters']['DURATION'] = '{}s'.format(duration)
+                t['parameters']['DURATION'] = f'{duration}s'
             else:
                 duration = convert_to_seconds(t['parameters']['DURATION'])
             timeout = { 'seconds': duration + 120 }
@@ -408,7 +410,7 @@ def generate_split_files(td, job, devicename, duration):
 
         job['actions'][idx] = action
 
-        filename = '{}/test-{}-{}.yaml'.format(td, t['name'], devicename)
+        filename = f'{td}/test-{t["name"]}-{devicename}.yaml'
         with open(filename, 'w') as f:
             yaml.dump(job, f, default_flow_style=False)
         split_files.append(filename)
@@ -472,13 +474,12 @@ def cmd_lava(ctx):
     if jobs == []:
         print('no jobs')
         return
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.machine), 'a') as f:
-        f.write('{}: '.format(jobs[0]))
+    with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'a') as f:
+        f.write(f'{jobs[0]}: ')
         f.write(' '.join(jobs))
         f.write('\n')
 
-    print('job id: {}'.format(jobs[0]))
+    print(f'job id: {jobs[0]}')
 
 
 def cmd_smoke(ctx):
@@ -502,42 +503,47 @@ def cmd_smoke(ctx):
             (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
             jobs.append(str(res).strip())
 
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.machine), 'a') as f:
-        f.write('{}: '.format(jobs[0]))
+    with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'a') as f:
+        f.write(f'{jobs[0]}: ')
         f.write(' '.join(jobs))
         f.write('\n')
 
-    print('job id: {}'.format(jobs[0]))
+    print(f'job id: {jobs[0]}')
 
 
 def get_jobs(machine, job_id, batch=False):
     if not batch:
         return [int(job_id)]
 
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            machine), 'r') as f:
-        for l in f.readlines():
-            try:
-                id = l.split(':')[0]
-                n = int(id)
-            except:
-                continue
-            if id and n == job_id:
-                return [ int(x.strip()) for x in l.split(":")[1].split(' ') if x]
+    try:
+        with open(f'{system_config["jobfiles-path"]}/srt-build.{machine}.jobs', 'r') as f:
+            for line in f.readlines():
+                try:
+                    id = line.split(':')[0]
+                    n = int(id)
+                except Exception as exc:
+                    debug(f'Error parsing job id from line: {line} ({exc})')
+                    continue
+                if id and n == job_id:
+                    return [ int(x.strip()) for x in line.split(":")[1].split(' ') if x]
+    except Exception as exc:
+        error(f'Error reading jobs file for machine {machine}: {exc}')
     return [int(job_id)]
 
 
 def get_job_list(ctx):
     jobs = []
-    with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.machine), 'r') as f:
-        for l in f.readlines():
-            try:
-                id = int(l.split(':')[0])
-            except:
-                continue
-            jobs.append(id)
+    try:
+        with open(f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs', 'r') as f:
+            for line in f.readlines():
+                try:
+                    id = int(line.split(':')[0])
+                except Exception as exc:
+                    debug(f'Error parsing job id from line: {line} ({exc})')
+                    continue
+                jobs.append(id)
+    except Exception as exc:
+        error(f'Error reading jobs file for machine {ctx.args.machine}: {exc}')
     return jobs
 
 
@@ -559,7 +565,8 @@ def handle_rt_results(test, job_ctx):
 
     try:
         measurement = float(test['measurement'])
-    except:
+    except Exception as exc:
+        debug(f'Could not parse measurement: {exc}')
         measurement = 0.0
 
     max_latency = -1
@@ -581,22 +588,63 @@ def handle_rt_results(test, job_ctx):
         result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
     else:
         result = bcolors.FAIL + 'fail' + bcolors.ENDC
-    print('  {:5} {:20} {:20}: {} {:>10.2f}'.format(
-        test['job'], test['suite'], test['name'], result, measurement))
+    print(
+        f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: '
+        f'{result} {measurement:>10.2f}'
+    )
 
-def job_result_print(jobid, job_ctx, metadata, result, download=False):
+def _get_color_result(passed):
+    """Return colored result string based on pass/fail status."""
     class bcolors:
-        HEADER = '\033[95m'
-        OKBLUE = '\033[94m'
         OKGREEN = '\033[92m'
-        WARNING = '\033[93m'
         FAIL = '\033[91m'
         ENDC = '\033[0m'
-        BOLD = '\033[1m'
-        UNDERLINE = '\033[4m'
+    
+    if passed:
+        return bcolors.OKGREEN + 'pass' + bcolors.ENDC
+    else:
+        return bcolors.FAIL + 'fail' + bcolors.ENDC
 
+
+def _print_test_result(test, job_ctx):
+    """Print a single test result with appropriate formatting."""
+    if test['suite'] in rt_suites:
+        handle_rt_results(test, job_ctx)
+    elif test['suite'] in suites:
+        handle_default_results(test, job_ctx)
+    elif test['result'] == 'fail':
+        handle_result_fail(test, job_ctx)
+
+def handle_result_fail(test, job_ctx):
+    """Default handler for failed test results."""
+    class bcolors:
+        FAIL = '\033[91m'
+        ENDC = '\033[0m'
+    print(
+        f'  {test.get("job", ""):5} {test.get("suite", ""):20} {test.get("name", ""):20}: '
+        f'{bcolors.FAIL}fail{bcolors.ENDC}'
+    )
+
+def handle_default_results(test, job_ctx):
+    """Default handler for test results."""
+    try:
+        measurement = float(test.get('measurement', 0.0))
+    except Exception as exc:
+        debug(f'Could not parse measurement: {exc}')
+        measurement = 0.0
+
+    passed = test.get('result', '') == 'pass'
+    result = _get_color_result(passed)
+    print(
+        f'  {test.get("job", ""):5} {test.get("suite", ""):20} {test.get("name", ""):20}: '
+        f'{result} {measurement:>10.2f}'
+    )
+
+
+def job_result_print(jobid, job_ctx, metadata, result, download=False):
+    """Print job results in a formatted manner."""
     if not result:
-        print('   {:5} no results'.format(jobid))
+        print(f'   {jobid:5} no results')
         return
 
     try:
@@ -607,41 +655,29 @@ def job_result_print(jobid, job_ctx, metadata, result, download=False):
 
     for test in res_ctx:
         debug(pformat(test))
-        if test['suite'] in rt_suites:
-            handle_rt_results(test, job_ctx)
-        elif test['suite'] in suites:
-            result = ''
-            if test['result'] == 'pass':
-                result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
-            else:
-                result = bcolors.FAIL + 'fail' + bcolors.ENDC
-            print('  {:5} {:20} {:20}: {}'.format(
-                test['job'], test['suite'], test['name'], result))
-        elif test['result'] == 'fail':
-            result = bcolors.FAIL + 'fail' + bcolors.ENDC
-            print('  {:5} {:20} {:20}: {}'.format(
-                test['job'], test['suite'], test['name'], result))
+        _print_test_result(test, job_ctx)
 
-        if 'test-attachment' == test['name']:
+        if test['name'] == 'test-attachment':
             if 'reference' not in test['metadata']:
                 continue
             if download:
                 url = test['metadata']['reference']
-                # print('  {:5} {}'.format(test['job'], url))
 
                 data = None
                 with urllib.request.urlopen(url) as f:
                     data = f.read().decode('utf-8')
 
                 d = json.loads(data)
-                fname = '{}/{}/{}/{}/{}/{}.json'.format(system_config['result-path'],
-                                                     metadata['host'],
-                                                     d['sysinfo']['release'],
-                                                     test['suite'][2:],
-                                                     test['job'],
-                                                     test['suite'][2:])
+                fname = os.path.join(
+                    system_config["result-path"],
+                    metadata["host"],
+                    d["sysinfo"]["release"],
+                    test["suite"][2:],
+                    str(test["job"]),
+                    f'{test["suite"][2:]}.json',
+                )
                 os.makedirs(os.path.dirname(fname), exist_ok=True)
-                print('  {:5} {}'.format(test['job'], fname))
+                print(f'  {test["job"]:5} {fname}')
                 with open(fname, 'w') as outfile:
                     outfile.write(data)
 
@@ -655,7 +691,8 @@ def get_job_context(id, ctx):
         data['description'] = job['description']
         job_ctx = load_job_ctx(ctx.job_path + '/boards/' + host + '.yaml')
         return (data, job_ctx)
-    except:
+    except Exception as exc:
+        error(f'Error getting job context for job {id}: {exc}')
         return None
 
 def cmd_jobs_results(ctx):
@@ -683,13 +720,11 @@ def cmd_jobs_results(ctx):
 
         (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(id)])
 
-        if ctx.args.host:
-            if metadata['host'] != ctx.args.host:
-                return
-        if ctx.args.description:
-            if metadata['description'] != ctx.args.description:
-                return
-        print('{host}\t{description}\t{version}'.format(**metadata))
+        if ctx.args.host and metadata['host'] != ctx.args.host:
+            return
+        if ctx.args.description and metadata['description'] != ctx.args.description:
+            return
+        print(f'{metadata["host"]}\t{metadata["description"]}\t{metadata["version"]}')
         job_result_print(id, job_ctx, metadata, res, ctx.args.download)
         return
 
@@ -701,8 +736,11 @@ def get_result(jobid, result):
     try:
         job_ctx = yaml.safe_load(result)
     except yaml.YAMLError as exc:
-        pprint(exc)
-        return
+        error(f'YAML error in job result for job {jobid}: {exc}')
+        return []
+    except Exception as exc:
+        error(f'Error loading job result for job {jobid}: {exc}')
+        return []
 
     table = []
     for test in job_ctx:
@@ -712,11 +750,11 @@ def get_result(jobid, result):
 
         try:
             measurement = float(test['measurement'])
-        except:
+        except Exception as exc:
+            debug(f'Could not parse measurement: {exc}')
             measurement = 0.0
 
-        table.append([test['suite'], test['name'],
-                      test['result'], measurement])
+        table.append([test['suite'], test['name'], test['result'], measurement])
 
     return table
 
@@ -750,9 +788,8 @@ def cmd_jobs_compare(ctx):
         diff = 0
         if c[3] != 0:
             diff = (e[3] - c[3])/c[3] * 100
-        val = '{:>10.2f}/{:>10.2f}'.format(e[3], c[3])
-        print('  {:20} {:20} {:20} {:10} {:>10.2f}%'.format(
-            e[0], e[1], e[2] + '/' + c[2], val, diff))
+        val = f'{e[3]:>10.2f}/{c[3]:>10.2f}'
+        print(f'  {e[0]:20} {e[1]:20} {e[2] + "/" + c[2]:20} {val:10} {diff:>10.2f}%')
 
 
 def cmd_jobs_cancel(ctx):
@@ -903,7 +940,7 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     if args.machine not in machine_config:
-        error('No valid machine config found for "{}"'.format(args.MACHINE))
+        error('No valid machine config found for "{}"'.format(args.machine))
         sys.exit(1)
 
     ctx = Context(args)
