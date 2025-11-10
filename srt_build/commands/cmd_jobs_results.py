@@ -1,5 +1,6 @@
 """Jobs results command - display LAVA job results."""
 import re
+from ..config import bcolors
 from ..helpers import ensure_lavacli_available, get_job_list, get_jobs
 from ..results import get_job_context, job_result_print
 from ..core import run_cmd
@@ -44,7 +45,9 @@ def cmd_jobs_results(ctx, system_config, rt_suites, suites):
     ensure_lavacli_available()
 
     metadata, job_ctx = get_job_context(id, ctx)
-    if not job_ctx:
+    if not metadata or not job_ctx:
+        print(f"{bcolors.WARNING}Cannot display results for job {id}. "
+              f"Job may not be assigned to a device yet.{bcolors.ENDC}")
         return
 
     if ctx.args.raw:

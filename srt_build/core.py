@@ -146,9 +146,6 @@ def create_logger():
 
 def setup(system_config):
     """Set up logging, event loop, and directories."""
-    # Check if we're in a kernel source directory first
-    check_kernel_source_directory()
-    
     create_logger()
     logging.getLogger('asyncio').setLevel(logging.INFO)
 

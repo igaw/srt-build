@@ -7,7 +7,7 @@ import sys
 import logging
 
 from .config import load_config
-from .core import setup
+from .core import setup, check_kernel_source_directory
 from .helpers import Context
 from .commands import (
     cmd_config,
@@ -60,12 +60,27 @@ def main():
         load_config()
     )
 
-    # Setup logging and event loop
-    setup(system_config)
-
-    # Parse arguments
+    # Parse arguments first to determine which command
     parser = create_parser()
     args = parser.parse_args(sys.argv[1:])
+
+    # Commands that require being in a kernel source directory
+    kernel_commands = [
+        cmd_config.cmd_config,
+        cmd_build.cmd_build,
+        cmd_install.cmd_install,
+        cmd_lava.cmd_lava,
+        cmd_smoke.cmd_smoke,
+        cmd_kexec.cmd_kexec,
+        cmd_all.cmd_all,
+    ]
+
+    # Check if we're in a kernel source directory for commands that need it
+    if args.func in kernel_commands:
+        check_kernel_source_directory()
+
+    # Setup logging and event loop
+    setup(system_config)
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)

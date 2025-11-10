@@ -135,6 +135,13 @@ def get_job_context(id, ctx):
     try:
         (_, res) = run_cmd(['lavacli', 'jobs', 'show', '--yaml', str(id)])
         job = yaml.safe_load(res)
+        
+        # Check if job has a device assigned yet
+        if job['device'] is None:
+            error(f'Job {id} has not been assigned to a device yet '
+                  f'(state: {job.get("state", "unknown")})')
+            return (None, None)
+        
         host = job['device'].split('-')[0]
         data['host'] = host
         data['description'] = job['description']
@@ -142,7 +149,7 @@ def get_job_context(id, ctx):
         return (data, job_ctx)
     except Exception as exc:
         error(f'Error getting job context for job {id}: {exc}')
-        return None
+        return (None, None)
 
 
 def get_result(jobid, result, rt_suites, suites):
