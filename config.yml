@@ -29,6 +29,25 @@ kernel_config:
   blktests: ['config-blktests']
   nvme: ['config-nvme']
 
+rt_suites:
+  - '0_jd-hackbench'
+  - '0_jd-compile'
+  - '0_jd-stress_ptrace'
+  - '0_cyclicdeadline'
+  - '0_cyclictest'
+  - '0_pi-stress'
+  - '0_pmqtest'
+  - '0_ptsematest'
+  - '0_rt-migrate-test'
+  - '0_signaltest'
+  - '0_sigwaittest'
+  - '0_svsematest'
+  - '0_rtla-osnoise'
+  - '0_rtla-timelat'
+
+suites:
+  - '0_smoke-tests'
+
 machine_config:
   bbb:
     hostname: bbb

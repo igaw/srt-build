@@ -35,6 +35,10 @@ kernel_config = {}
 
 machine_config = {}
 
+rt_suites = []
+
+suites = []
+
 _config_candidates = [
     os.path.join(os.path.dirname(__file__), 'config.yml'),
     os.path.join(os.getcwd(), 'config.yml'),
@@ -58,6 +62,8 @@ for _p in _config_candidates:
 system_config = _loaded_cfg.get('system_config', system_config)
 kernel_config = _loaded_cfg.get('kernel_config', kernel_config)
 machine_config = _loaded_cfg.get('machine_config', machine_config)
+rt_suites = _loaded_cfg.get('rt_suites', rt_suites)
+suites = _loaded_cfg.get('suites', suites)
 
 ##############################
 
@@ -467,7 +473,7 @@ def cmd_lava(ctx):
         print('no jobs')
         return
     with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.MACHINE), 'a') as f:
+                                            ctx.args.machine), 'a') as f:
         f.write('{}: '.format(jobs[0]))
         f.write(' '.join(jobs))
         f.write('\n')
@@ -497,7 +503,7 @@ def cmd_smoke(ctx):
             jobs.append(str(res).strip())
 
     with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.MACHINE), 'a') as f:
+                                            ctx.args.machine), 'a') as f:
         f.write('{}: '.format(jobs[0]))
         f.write(' '.join(jobs))
         f.write('\n')
@@ -525,7 +531,7 @@ def get_jobs(machine, job_id, batch=False):
 def get_job_list(ctx):
     jobs = []
     with open('{}/srt-build.{}.jobs'.format(system_config['jobfiles-path'],
-                                            ctx.args.MACHINE), 'r') as f:
+                                            ctx.args.machine), 'r') as f:
         for l in f.readlines():
             try:
                 id = int(l.split(':')[0])
@@ -577,22 +583,6 @@ def handle_rt_results(test, job_ctx):
         result = bcolors.FAIL + 'fail' + bcolors.ENDC
     print('  {:5} {:20} {:20}: {} {:>10.2f}'.format(
         test['job'], test['suite'], test['name'], result, measurement))
-
-rt_suites = ['0_jd-hackbench',
-             '0_jd-compile',
-             '0_jd-stress_ptrace',
-             '0_cyclicdeadline',
-             '0_cyclictest',
-             '0_pi-stress',
-             '0_pmqtest',
-             '0_ptsematest',
-             '0_rt-migrate-test',
-             '0_signaltest',
-             '0_sigwaittest',
-             '0_svsematest',
-             '0_rtla-osnoise',
-             '0_rtla-timelat']
-suites = ['0_smoke-tests']
 
 def job_result_print(jobid, job_ctx, metadata, result, download=False):
     class bcolors:
@@ -703,7 +693,7 @@ def cmd_jobs_results(ctx):
         job_result_print(id, job_ctx, metadata, res, ctx.args.download)
         return
 
-    for j in get_jobs(ctx.args.MACHINE, id, batch):
+    for j in get_jobs(ctx.args.machine, id, batch):
         (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(j)])
         job_result_print(j, job_ctx, metadata, res, ctx.args.download)
 
@@ -750,8 +740,8 @@ def cmd_jobs_compare(ctx):
     id1 = int(ctx.args.id1)
     id2 = int(ctx.args.id2)
 
-    r1 = get_results(ctx.args.MACHINE, id1)
-    r2 = get_results(ctx.args.MACHINE, id2)
+    r1 = get_results(ctx.args.machine, id1)
+    r2 = get_results(ctx.args.machine, id2)
 
     for e in r1:
         c = lookup_entry(r2, e[0], e[1])
@@ -773,7 +763,7 @@ def cmd_jobs_cancel(ctx):
     else:
         id = int(ctx.args.id)
 
-    for j in get_jobs(ctx.args.MACHINE, id, batch=True):
+    for j in get_jobs(ctx.args.machine, id, batch=True):
         print(j)
         run(['lavacli', 'jobs', 'cancel', str(j)])
 
@@ -815,37 +805,40 @@ def cmd_all(ctx):
 
 def create_parse():
     parser = argparse.ArgumentParser(description='srt - stable -rt tooling')
-    parser.add_argument('MACHINE')
-
     parser.add_argument('-d', '--debug',
                         action='store_true',
                         help='Enable debug logging')
     parser.add_argument('--append', default='')
     parser.add_argument('--builddir', default=None)
 
-    subparser = parser.add_subparsers(help='sub command help', dest='cmd')
+    subparser = parser.add_subparsers(help='sub command help', dest='cmd', required=True)
 
     bcpsr = subparser.add_parser('config')
+    bcpsr.add_argument('machine', help='Target machine')
     bcpsr.add_argument('--config')
     bcpsr.add_argument('--config-base', default='')
     bcpsr.add_argument('--flavor', default='')
     bcpsr.set_defaults(func=cmd_config)
 
     bpsr = subparser.add_parser('build')
+    bpsr.add_argument('machine', help='Target machine')
     bpsr.set_defaults(func=cmd_build)
     bpsr.add_argument('--mods', default=False, action='store_true')
 
     kpsg = subparser.add_parser('kexec')
+    kpsg.add_argument('machine', help='Target machine')
     kpsg.add_argument('--append', default='')
     kpsg.add_argument('--rootfs', default='')
     kpsg.set_defaults(func=cmd_kexec)
 
     ipsg = subparser.add_parser('install')
+    ipsg.add_argument('machine', help='Target machine')
     ipsg.add_argument('--dest')
     ipsg.add_argument('--postfix')
     ipsg.set_defaults(func=cmd_install)
 
     lpsg = subparser.add_parser('lava')
+    lpsg.add_argument('machine', help='Target machine')
     lpsg.add_argument('--skip-build', default=False,
                       action='store_true')
     lpsg.add_argument('--mods', default=False,
@@ -858,11 +851,13 @@ def create_parse():
     lpsg.set_defaults(func=cmd_lava)
 
     spsg = subparser.add_parser('smoke')
+    spsg.add_argument('machine', help='Target machine')
     spsg.add_argument('--duration', default='5m')
     spsg.set_defaults(func=cmd_smoke)
 
     jpsg = subparser.add_parser('jobs')
-    sjpsg = jpsg.add_subparsers(help='LAVA jobs commands')
+    jpsg.add_argument('machine', help='Target machine')
+    sjpsg = jpsg.add_subparsers(help='LAVA jobs commands', dest='jobs_cmd', required=True)
     lpsg = sjpsg.add_parser('list')
     lpsg.set_defaults(func=cmd_jobs_list)
     rpsg = sjpsg.add_parser('results')
@@ -889,6 +884,7 @@ def create_parse():
     jpsg.set_defaults(func=cmd_jobs)
 
     apsg = subparser.add_parser('all')
+    apsg.add_argument('machine', help='Target machine')
     apsg.add_argument('--config')
     apsg.add_argument('--config-base', default='')
     apsg.add_argument('--append', default='')
@@ -906,7 +902,7 @@ def main():
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    if args.MACHINE not in machine_config:
+    if args.machine not in machine_config:
         error('No valid machine config found for "{}"'.format(args.MACHINE))
         sys.exit(1)
 
