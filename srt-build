@@ -193,9 +193,9 @@ def ensure_lavacli_available():
 class Context():
     def __init__(self, args):
         # Validate that the machine exists in machine_config
-        if args.MACHINE not in machine_config:
-            raise KeyError(f'Machine "{args.MACHINE}" not found in machine_config')
-        mc = machine_config[args.MACHINE]
+        if args.machine not in machine_config:
+            raise KeyError(f'Machine "{args.machine}" not found in machine_config')
+        mc = machine_config[args.machine]
         self.__dict__.update(mc)
         self.__dict__['args'] = args
         if args.builddir:
@@ -903,7 +903,7 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     if args.machine not in machine_config:
-        error('No valid machine config found for "{}"'.format(args.MACHINE))
+        error('No valid machine config found for "{}"'.format(args.machine))
         sys.exit(1)
 
     ctx = Context(args)
