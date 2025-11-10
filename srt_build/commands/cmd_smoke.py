@@ -1,5 +1,7 @@
 """Smoke test command - run quick smoke tests on LAVA."""
+import os
 import tempfile
+from ..config import bcolors
 from ..helpers import (
     ensure_lavacli_available,
     convert_to_seconds,
@@ -23,6 +25,15 @@ def add_parser(subparser):
 
 def cmd_smoke(ctx, system_config):
     """Run smoke tests on LAVA."""
+    # Check if kernel exists first
+    kernel_image = os.path.join(ctx.build_path, ctx.image)
+    if not os.path.exists(kernel_image):
+        print(f"{bcolors.FAIL}Error: Kernel image not found at "
+              f"{kernel_image}{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}Please build the kernel first with: "
+              f"./srt-build-new build {ctx.args.machine}{bcolors.ENDC}")
+        return
+
     ensure_lavacli_available()
     duration = convert_to_seconds(ctx.args.duration)
 
