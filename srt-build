@@ -361,50 +361,70 @@ def generate_file(job, testname, devicename):
     return [ filename ]
 
 
+def _find_test_index(job):
+    idx = 0
+    for val in job.get('actions', []):
+        if 'test' in val:
+            return idx
+        idx += 1
+    return 0
+
+def _initial_timeout(job, idx):
+    timeout = None
+    action_to = job.get('timeouts', {}).get('action')
+    if action_to:
+        timeout = action_to
+    test_to = job.get('actions', [{}])[idx].get('test', {}).get('timeout')
+    if test_to:
+        timeout = test_to
+    return timeout
+
+def _override_duration_and_timeout(t, duration):
+    # returns (new_duration, timeout_dict or None)
+    if 'parameters' in t and 'DURATION' in t['parameters']:
+        if duration:
+            t['parameters']['DURATION'] = f'{duration}s'
+        else:
+            duration = convert_to_seconds(t['parameters']['DURATION'])
+        return duration, { 'seconds': duration + 120 }
+    return duration, None
+
+def _bump_job_timeouts(job, duration):
+    # ensure job timeouts are large enough given duration (seconds)
+    if duration is None:
+        return
+    mins = int(duration / 60) + 5
+    try:
+        if int(job['timeouts']['action']['minutes']) * 60 < duration:
+            job['timeouts']['action']['minutes'] = mins
+        if int(job['timeouts']['job']['minutes']) * 60 < duration:
+            job['timeouts']['job']['minutes'] = mins
+        if int(job['timeouts']['connection']['minutes']) * 60 < duration:
+            job['timeouts']['connection']['minutes'] = mins
+    except Exception:
+        # be tolerant if structure changes
+        pass
+
 def generate_split_files(td, job, devicename, duration):
     split_files = []
 
     job = yaml.safe_load(job)
 
-    idx = 0
-    for val in job['actions']:
-        if 'test' in val.keys():
-            break
-        idx = idx + 1
-
+    idx = _find_test_index(job)
     tests = job['actions'][idx]['test']['definitions']
 
-    timeout = None
-    if 'timeout' in job['timeouts']['action']:
-        timeout = job['timeouts']['action']
-    if 'timeout' in job['actions'][idx]['test']:
-        timeout = job['actions'][idx]['test']['timeout']
-
+    timeout = _initial_timeout(job, idx)
     if duration:
-        # add grace period of 2 minutes to make sure shell script
-        # in lava is able run
         timeout = { 'seconds': duration + 120 }
 
     for t in tests:
-        if 'parameters' in t and 'DURATION' in t['parameters']:
-            if duration:
-                # overwrite duration from job file template with
-                # the value provided from the command line
-                t['parameters']['DURATION'] = f'{duration}s'
-            else:
-                duration = convert_to_seconds(t['parameters']['DURATION'])
-            timeout = { 'seconds': duration + 120 }
+        # compute duration/timeout for this test
+        duration, t_timeout = _override_duration_and_timeout(t, duration)
+        if t_timeout:
+            timeout = t_timeout
+        _bump_job_timeouts(job, duration)
 
-            if int(job['timeouts']['action']['minutes']) * 60 < duration:
-                job['timeouts']['action']['minutes'] = int(duration / 60) + 5
-            if int(job['timeouts']['job']['minutes']) * 60 < duration:
-                job['timeouts']['job']['minutes'] = int(duration / 60) + 5
-            if int(job['timeouts']['connection']['minutes']) * 60 < duration:
-                job['timeouts']['connection']['minutes'] = int(duration / 60) + 5
-
-        action = {}
-        action['test'] = {}
-        action['test']['definitions'] = [ t ]
+        action = { 'test': { 'definitions': [ t ] } }
         if timeout:
             action['test']['timeout'] = timeout
 
