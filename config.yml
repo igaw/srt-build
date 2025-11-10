@@ -1,8 +1,5 @@
 system_config:
-  base-build-path: /home/wagi/build
   base-tool-path: /home/wagi/rt/drk
-  jobfiles-path: /home/wagi/tmp
-  result-path: /home/wagi/tmp/results
 
 kernel_config:
   nobase: ['']

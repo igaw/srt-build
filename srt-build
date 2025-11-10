@@ -21,12 +21,22 @@ from subprocess import run
 import multiprocessing
 import shutil
 
+# Global color class for terminal output
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 system_config = {
-    'base-build-path':  '.',
+    'base-build-path':  os.path.expanduser('~/.cache/srt-build/build'),
     'base-tool-path': '.',
-    'jobfiles-path': '.',
-    'result-path': '.',
+    'jobfiles-path': os.path.expanduser('~/.cache/srt-build/jobs'),
+    'result-path': os.path.expanduser('~/.cache/srt-build/results'),
 }
 
 kernel_config = {}
@@ -171,6 +181,11 @@ def setup():
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, interruption)
     atexit.register(_atexit_handler)
+
+    # Ensure cache directories exist
+    os.makedirs(system_config['base-build-path'], exist_ok=True)
+    os.makedirs(system_config['jobfiles-path'], exist_ok=True)
+    os.makedirs(system_config['result-path'], exist_ok=True)
 
 
 #######################################
@@ -361,50 +376,68 @@ def generate_file(job, testname, devicename):
     return [ filename ]
 
 
+def _find_test_index(job):
+    for idx, val in enumerate(job.get('actions', [])):
+        if 'test' in val:
+            return idx
+    return 0
+
+def _initial_timeout(job, idx):
+    timeout = None
+    action_to = job.get('timeouts', {}).get('action')
+    if action_to:
+        timeout = action_to
+    test_to = job.get('actions', [{}])[idx].get('test', {}).get('timeout')
+    if test_to:
+        timeout = test_to
+    return timeout
+
+def _override_duration_and_timeout(t, duration):
+    # returns (new_duration, timeout_dict or None)
+    if 'parameters' in t and 'DURATION' in t['parameters']:
+        if duration:
+            t['parameters']['DURATION'] = f'{duration}s'
+        else:
+            duration = convert_to_seconds(t['parameters']['DURATION'])
+        return duration, { 'seconds': duration + 120 }
+    return duration, None
+
+def _bump_job_timeouts(job, duration):
+    # ensure job timeouts are large enough given duration (seconds)
+    if duration is None:
+        return
+    mins = int(duration / 60) + 5
+    try:
+        if int(job['timeouts']['action']['minutes']) * 60 < duration:
+            job['timeouts']['action']['minutes'] = mins
+        if int(job['timeouts']['job']['minutes']) * 60 < duration:
+            job['timeouts']['job']['minutes'] = mins
+        if int(job['timeouts']['connection']['minutes']) * 60 < duration:
+            job['timeouts']['connection']['minutes'] = mins
+    except Exception:
+        # be tolerant if structure changes
+        pass
+
 def generate_split_files(td, job, devicename, duration):
     split_files = []
 
     job = yaml.safe_load(job)
 
-    idx = 0
-    for val in job['actions']:
-        if 'test' in val.keys():
-            break
-        idx = idx + 1
-
+    idx = _find_test_index(job)
     tests = job['actions'][idx]['test']['definitions']
 
-    timeout = None
-    if 'timeout' in job['timeouts']['action']:
-        timeout = job['timeouts']['action']
-    if 'timeout' in job['actions'][idx]['test']:
-        timeout = job['actions'][idx]['test']['timeout']
-
+    timeout = _initial_timeout(job, idx)
     if duration:
-        # add grace period of 2 minutes to make sure shell script
-        # in lava is able run
         timeout = { 'seconds': duration + 120 }
 
     for t in tests:
-        if 'parameters' in t and 'DURATION' in t['parameters']:
-            if duration:
-                # overwrite duration from job file template with
-                # the value provided from the command line
-                t['parameters']['DURATION'] = f'{duration}s'
-            else:
-                duration = convert_to_seconds(t['parameters']['DURATION'])
-            timeout = { 'seconds': duration + 120 }
+        # compute duration/timeout for this test
+        duration, t_timeout = _override_duration_and_timeout(t, duration)
+        if t_timeout:
+            timeout = t_timeout
+        _bump_job_timeouts(job, duration)
 
-            if int(job['timeouts']['action']['minutes']) * 60 < duration:
-                job['timeouts']['action']['minutes'] = int(duration / 60) + 5
-            if int(job['timeouts']['job']['minutes']) * 60 < duration:
-                job['timeouts']['job']['minutes'] = int(duration / 60) + 5
-            if int(job['timeouts']['connection']['minutes']) * 60 < duration:
-                job['timeouts']['connection']['minutes'] = int(duration / 60) + 5
-
-        action = {}
-        action['test'] = {}
-        action['test']['definitions'] = [ t ]
+        action = { 'test': { 'definitions': [ t ] } }
         if timeout:
             action['test']['timeout'] = timeout
 
@@ -418,59 +451,55 @@ def generate_split_files(td, job, devicename, duration):
     return split_files
 
 
-def cmd_lava(ctx):
-    ensure_lavacli_available()
-    ctx.args.config = ''
-
+def _get_flavors(ctx):
     flavors = ['rt', 'nohz', 'vp', 'll', 'up']
     if ctx.args.flavors:
         flavors = ctx.args.flavors.split(' ,')
+    return flavors
 
-    duration = None
-    if ctx.args.duration:
-        duration = convert_to_seconds(ctx.args.duration)
 
-    jobs = []
+def _prepare_build_for_flavor(ctx, fl):
+    ctx.args.dest = 'lava'
+    ctx.args.postfix = '-' + fl
+    (res, ref) = run_cmd(['git', 'describe'])
+    if not res:
+        ctx.args.postfix += '-' + ref
 
-    for fl in flavors:
-        ctx.args.dest = 'lava'
-        ctx.args.postfix = '-' + fl
-        (res, ref) = run_cmd(['git', 'describe'])
-        if not res:
-            ctx.args.postfix += '-' + ref
 
-        if not ctx.args.skip_build:
-            ctx.args.flavor = fl
-            cmd_config(ctx)
-            cmd_build(ctx)
-            cmd_install(ctx)
+def _build_flavor(ctx, fl):
+    if not ctx.args.skip_build:
+        ctx.args.flavor = fl
+        cmd_config(ctx)
+        cmd_build(ctx)
+        cmd_install(ctx)
 
-        with tempfile.TemporaryDirectory() as td:
-            job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
-            job_ctx['kernel_url'] += ctx.args.postfix
-            job_ctx['tags'] = [ ctx.hostname ]
 
-            testpath = ctx.job_path + '/' + fl
-            if ctx.args.testsuites:
-                testpath = testpath + '/' + ctx.args.testsuites
-            for file in sorted(os.listdir(testpath)):
-                if not file.endswith('.jinja2'):
-                    continue
+def _get_testpath(ctx, fl):
+    testpath = ctx.job_path + '/' + fl
+    if ctx.args.testsuites:
+        testpath = testpath + '/' + ctx.args.testsuites
+    return testpath
 
-                filename = testpath + '/' + file
-                job = generate_job(ctx.job_path, filename, job_ctx)
 
-                j = yaml.safe_load(job)
-                if ctx.args.tests and j['job_name'] != ctx.args.tests:
-                    continue
+def _process_test_files(ctx, td, job_ctx, testpath, duration, jobs):
+    for file in sorted(os.listdir(testpath)):
+        if not file.endswith('.jinja2'):
+            continue
 
-                files = generate_split_files(td, job, ctx.hostname, duration)
-                for j in files:
-                    (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
-                    jobs.append(str(res).strip())
+        filename = testpath + '/' + file
+        job = generate_job(ctx.job_path, filename, job_ctx)
 
-            copytree(td, '/home/wagi/tmp/jobs', dirs_exist_ok=True)
+        j = yaml.safe_load(job)
+        if ctx.args.tests and j['job_name'] != ctx.args.tests:
+            continue
 
+        files = generate_split_files(td, job, ctx.hostname, duration)
+        for j in files:
+            (_, res) = run_cmd(['lavacli', 'jobs', 'submit', j])
+            jobs.append(str(res).strip())
+
+
+def _save_job_ids(ctx, jobs):
     if jobs == []:
         print('no jobs')
         return
@@ -478,8 +507,36 @@ def cmd_lava(ctx):
         f.write(f'{jobs[0]}: ')
         f.write(' '.join(jobs))
         f.write('\n')
-
     print(f'job id: {jobs[0]}')
+
+
+def cmd_lava(ctx):
+    ensure_lavacli_available()
+    ctx.args.config = ''
+
+    flavors = _get_flavors(ctx)
+    duration = None
+    if ctx.args.duration:
+        duration = convert_to_seconds(ctx.args.duration)
+
+    jobs = []
+
+    for fl in flavors:
+        _prepare_build_for_flavor(ctx, fl)
+        _build_flavor(ctx, fl)
+
+        with tempfile.TemporaryDirectory() as td:
+            job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
+            job_ctx['kernel_url'] += ctx.args.postfix
+            job_ctx['tags'] = [ ctx.hostname ]
+
+            testpath = _get_testpath(ctx, fl)
+            _process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
+
+            copytree(td, system_config['jobfiles-path'], dirs_exist_ok=True)
+
+    _save_job_ids(ctx, jobs)
+
 
 
 def cmd_smoke(ctx):
@@ -553,15 +610,6 @@ def cmd_jobs_list(ctx):
 
 
 def handle_rt_results(test, job_ctx):
-    class bcolors:
-        HEADER = '\033[95m'
-        OKBLUE = '\033[94m'
-        OKGREEN = '\033[92m'
-        WARNING = '\033[93m'
-        FAIL = '\033[91m'
-        ENDC = '\033[0m'
-        BOLD = '\033[1m'
-        UNDERLINE = '\033[4m'
 
     try:
         measurement = float(test['measurement'])
@@ -595,10 +643,6 @@ def handle_rt_results(test, job_ctx):
 
 def _get_color_result(passed):
     """Return colored result string based on pass/fail status."""
-    class bcolors:
-        OKGREEN = '\033[92m'
-        FAIL = '\033[91m'
-        ENDC = '\033[0m'
     
     if passed:
         return bcolors.OKGREEN + 'pass' + bcolors.ENDC
@@ -617,9 +661,6 @@ def _print_test_result(test, job_ctx):
 
 def handle_result_fail(test, job_ctx):
     """Default handler for failed test results."""
-    class bcolors:
-        FAIL = '\033[91m'
-        ENDC = '\033[0m'
     print(
         f'  {test.get("job", ""):5} {test.get("suite", ""):20} {test.get("name", ""):20}: '
         f'{bcolors.FAIL}fail{bcolors.ENDC}'
