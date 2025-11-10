@@ -1,6 +1,19 @@
 """Lava command - run LAVA tests with different kernel flavors."""
 import tempfile
 from shutil import copytree
+from ..helpers import (
+    ensure_lavacli_available,
+    get_flavors,
+    convert_to_seconds,
+    prepare_build_for_flavor,
+    load_job_ctx,
+    get_testpath,
+    process_test_files,
+    save_job_ids,
+)
+from .cmd_config import cmd_config
+from .cmd_build import cmd_build
+from .cmd_install import cmd_install
 
 
 def add_parser(subparser):
@@ -18,15 +31,21 @@ def add_parser(subparser):
     return lpsg
 
 
-def cmd_lava(ctx):
+def build_flavor(ctx, fl, kernel_config):
+    """Build a specific flavor if not skipped."""
+    if not ctx.args.skip_build:
+        ctx.args.flavor = fl
+        cmd_config(ctx, kernel_config)
+        cmd_build(ctx)
+        cmd_install(ctx)
+
+
+def cmd_lava(ctx, system_config, kernel_config):
     """Run LAVA tests with kernel builds for different flavors."""
-    # Import these from the main module when refactored
-    # ensure_lavacli_available, _get_flavors, convert_to_seconds, etc.
-    
-    # ensure_lavacli_available()
+    ensure_lavacli_available()
     ctx.args.config = ''
 
-    flavors = _get_flavors(ctx)
+    flavors = get_flavors(ctx)
     duration = None
     if ctx.args.duration:
         duration = convert_to_seconds(ctx.args.duration)
@@ -34,17 +53,19 @@ def cmd_lava(ctx):
     jobs = []
 
     for fl in flavors:
-        _prepare_build_for_flavor(ctx, fl)
-        _build_flavor(ctx, fl)
+        prepare_build_for_flavor(ctx, fl)
+        build_flavor(ctx, fl, kernel_config)
 
         with tempfile.TemporaryDirectory() as td:
-            job_ctx = load_job_ctx(ctx.job_path + '/boards/' + ctx.hostname + '.yaml')
+            job_ctx = load_job_ctx(
+                ctx.job_path + '/boards/' + ctx.hostname + '.yaml'
+            )
             job_ctx['kernel_url'] += ctx.args.postfix
-            job_ctx['tags'] = [ ctx.hostname ]
+            job_ctx['tags'] = [ctx.hostname]
 
-            testpath = _get_testpath(ctx, fl)
-            _process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
+            testpath = get_testpath(ctx, fl)
+            process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
 
             copytree(td, system_config['jobfiles-path'], dirs_exist_ok=True)
 
-    _save_job_ids(ctx, jobs)
+    save_job_ids(ctx, jobs, system_config)

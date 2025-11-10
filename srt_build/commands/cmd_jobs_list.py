@@ -1,4 +1,5 @@
 """Jobs list command - list all LAVA job IDs."""
+from ..helpers import get_job_list
 
 
 def add_parser(subparser):
@@ -9,9 +10,7 @@ def add_parser(subparser):
     return lpsg
 
 
-def cmd_jobs_list(ctx):
+def cmd_jobs_list(ctx, system_config):
     """List all job IDs for the specified machine."""
-    # Import get_job_list from main module when refactored
-    # for id in get_job_list(ctx):
-    #     print(id)
-    pass
+    for id in get_job_list(ctx, system_config):
+        print(id)

@@ -1,4 +1,7 @@
 """All command - run config, build, and kexec in sequence."""
+from .cmd_config import cmd_config
+from .cmd_build import cmd_build
+from .cmd_kexec import cmd_kexec
 
 
 def add_parser(subparser):
@@ -14,12 +17,10 @@ def add_parser(subparser):
     return apsg
 
 
-def cmd_all(ctx):
+def cmd_all(ctx, kernel_config):
     """Run config, build, and kexec commands in sequence."""
-    # Import cmd_config, cmd_build, cmd_kexec from other modules
-    # cmd_config(ctx)
-    # c = cmd_build(ctx)
-    # if c:
-    #     return
-    # cmd_kexec(ctx)
-    pass
+    cmd_config(ctx, kernel_config)
+    c = cmd_build(ctx)
+    if c:
+        return
+    cmd_kexec(ctx)
