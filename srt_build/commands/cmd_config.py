@@ -92,7 +92,7 @@ def _list_configs(ctx, kernel_config):
                 path,
                 _fmt_bool(os.path.isfile(path)),
             ])
-    _print_table(["Group", "Flavor", "Fragment", "Path", "Exists"], krows)
+    _print_table(["Config Base", "Flavor", "Fragment", "Path", "Exists"], krows)
 
     # Flavors summary table
     print(f"\n{bcolors.BOLD}Flavors summary:{bcolors.ENDC}")

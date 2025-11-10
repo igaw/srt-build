@@ -1,6 +1,3 @@
-system_config:
-  base-tool-path: /home/wagi/rt/drk
-
 kernel_config:
   nobase: ['']
   "": ['config-base']
