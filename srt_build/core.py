@@ -101,9 +101,8 @@ def run_cmd(cmd, cwd=None):
 
 
 def interruption():
-    """Cancel all async tasks on interruption."""
+    """Cancel all async tasks on interruption without noisy output."""
     for task in asyncio.all_tasks():
-        print(task)
         task.cancel()
 
 
