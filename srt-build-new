@@ -11,4 +11,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from srt_build.main import main
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Graceful Ctrl-C handling
+        from srt_build.config import bcolors
+
+        print(
+            f"\n{bcolors.WARNING}Interrupted by user (Ctrl-C). "
+            f"Exiting cleanly.{bcolors.ENDC}"
+        )
+        # Use 130 (128 + SIGINT) as conventional exit code for Ctrl-C
+        sys.exit(130)
