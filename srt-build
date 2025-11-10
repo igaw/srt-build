@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 import logging
-from logging import info, warning, debug, error
+from logging import warning, debug, error
 import json
 import urllib.request
 import tempfile
@@ -13,13 +13,11 @@ import argparse
 import sys
 import os
 import re
-import concurrent.futures
 import jinja2
 import yaml
 from pprint import pprint, pformat
-from time import sleep
 from shutil import copyfile, copytree
-from subprocess import run, Popen, PIPE, STDOUT, CalledProcessError
+from subprocess import run
 import multiprocessing
 import shutil
 
@@ -590,19 +588,61 @@ def handle_rt_results(test, job_ctx):
         result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
     else:
         result = bcolors.FAIL + 'fail' + bcolors.ENDC
-    print(f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: {result} {measurement:>10.2f}')
+    print(
+        f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: '
+        f'{result} {measurement:>10.2f}'
+    )
 
-def job_result_print(jobid, job_ctx, metadata, result, download=False):
+def _get_color_result(passed):
+    """Return colored result string based on pass/fail status."""
     class bcolors:
-        HEADER = '\033[95m'
-        OKBLUE = '\033[94m'
         OKGREEN = '\033[92m'
-        WARNING = '\033[93m'
         FAIL = '\033[91m'
         ENDC = '\033[0m'
-        BOLD = '\033[1m'
-        UNDERLINE = '\033[4m'
+    
+    if passed:
+        return bcolors.OKGREEN + 'pass' + bcolors.ENDC
+    else:
+        return bcolors.FAIL + 'fail' + bcolors.ENDC
 
+
+def _print_test_result(test, job_ctx):
+    """Print a single test result with appropriate formatting."""
+    if test['suite'] in rt_suites:
+        handle_rt_results(test, job_ctx)
+    elif test['suite'] in suites:
+        handle_default_results(test, job_ctx)
+    elif test['result'] == 'fail':
+        handle_result_fail(test, job_ctx)
+
+def handle_result_fail(test, job_ctx):
+    """Default handler for failed test results."""
+    class bcolors:
+        FAIL = '\033[91m'
+        ENDC = '\033[0m'
+    print(
+        f'  {test.get("job", ""):5} {test.get("suite", ""):20} {test.get("name", ""):20}: '
+        f'{bcolors.FAIL}fail{bcolors.ENDC}'
+    )
+
+def handle_default_results(test, job_ctx):
+    """Default handler for test results."""
+    try:
+        measurement = float(test.get('measurement', 0.0))
+    except Exception as exc:
+        debug(f'Could not parse measurement: {exc}')
+        measurement = 0.0
+
+    passed = test.get('result', '') == 'pass'
+    result = _get_color_result(passed)
+    print(
+        f'  {test.get("job", ""):5} {test.get("suite", ""):20} {test.get("name", ""):20}: '
+        f'{result} {measurement:>10.2f}'
+    )
+
+
+def job_result_print(jobid, job_ctx, metadata, result, download=False):
+    """Print job results in a formatted manner."""
     if not result:
         print(f'   {jobid:5} no results')
         return
@@ -615,32 +655,27 @@ def job_result_print(jobid, job_ctx, metadata, result, download=False):
 
     for test in res_ctx:
         debug(pformat(test))
-        if test['suite'] in rt_suites:
-            handle_rt_results(test, job_ctx)
-        elif test['suite'] in suites:
-            result = ''
-            if test['result'] == 'pass':
-                result = bcolors.OKGREEN + 'pass' + bcolors.ENDC
-            else:
-                result = bcolors.FAIL + 'fail' + bcolors.ENDC
-            print(f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: {result}')
-        elif test['result'] == 'fail':
-            result = bcolors.FAIL + 'fail' + bcolors.ENDC
-            print(f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: {result}')
+        _print_test_result(test, job_ctx)
 
-        if 'test-attachment' == test['name']:
+        if test['name'] == 'test-attachment':
             if 'reference' not in test['metadata']:
                 continue
             if download:
                 url = test['metadata']['reference']
-                # print(f'  {test["job"]:5} {url}')
 
                 data = None
                 with urllib.request.urlopen(url) as f:
                     data = f.read().decode('utf-8')
 
                 d = json.loads(data)
-                fname = f'{system_config["result-path"]}/{metadata["host"]}/{d["sysinfo"]["release"]}/{test["suite"][2:]}/{test["job"]}/{test["suite"][2:]}.json'
+                fname = os.path.join(
+                    system_config["result-path"],
+                    metadata["host"],
+                    d["sysinfo"]["release"],
+                    test["suite"][2:],
+                    str(test["job"]),
+                    f'{test["suite"][2:]}.json',
+                )
                 os.makedirs(os.path.dirname(fname), exist_ok=True)
                 print(f'  {test["job"]:5} {fname}')
                 with open(fname, 'w') as outfile:
@@ -685,12 +720,10 @@ def cmd_jobs_results(ctx):
 
         (_, res) = run_cmd(['lavacli', 'results', '--yaml', str(id)])
 
-        if ctx.args.host:
-            if metadata['host'] != ctx.args.host:
-                return
-        if ctx.args.description:
-            if metadata['description'] != ctx.args.description:
-                return
+        if ctx.args.host and metadata['host'] != ctx.args.host:
+            return
+        if ctx.args.description and metadata['description'] != ctx.args.description:
+            return
         print(f'{metadata["host"]}\t{metadata["description"]}\t{metadata["version"]}')
         job_result_print(id, job_ctx, metadata, res, ctx.args.download)
         return
