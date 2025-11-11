@@ -17,16 +17,16 @@ from . import (
 )
 
 __all__ = [
-    'cmd_config',
-    'cmd_build',
-    'cmd_install',
-    'cmd_lava',
-    'cmd_smoke',
-    'cmd_jobs',
-    'cmd_jobs_list',
-    'cmd_jobs_results',
-    'cmd_jobs_compare',
-    'cmd_jobs_cancel',
-    'cmd_kexec',
-    'cmd_all',
+    "cmd_config",
+    "cmd_build",
+    "cmd_install",
+    "cmd_lava",
+    "cmd_smoke",
+    "cmd_jobs",
+    "cmd_jobs_list",
+    "cmd_jobs_results",
+    "cmd_jobs_compare",
+    "cmd_jobs_cancel",
+    "cmd_kexec",
+    "cmd_all",
 ]
