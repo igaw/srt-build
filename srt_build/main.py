@@ -88,6 +88,10 @@ def main():
         (args.func in kernel_commands) or
         (args.func == cmd_config.cmd_config and not getattr(args, 'list', False))
     )
+    # Exception: lava --list-tests doesn't need kernel source
+    if (args.func == cmd_lava.cmd_lava and
+            hasattr(args, 'list_tests') and args.list_tests):
+        need_kernel_source = False
 
     if need_kernel_source:
         check_kernel_source_directory()
@@ -97,6 +101,19 @@ def main():
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    # Special handling for lava --list-tests (doesn't require machine)
+    if (args.func == cmd_lava.cmd_lava and
+            hasattr(args, 'list_tests') and args.list_tests):
+        # Create a minimal context without machine validation
+        # Use a dummy machine to get job_path
+        dummy_machine = list(machine_config.keys())[0]
+        args_copy = argparse.Namespace(**vars(args))
+        args_copy.machine = dummy_machine
+        ctx = Context(args_copy, machine_config, system_config)
+        ctx.args = args  # Restore original args
+        cmd_lava.cmd_lava(ctx, system_config, kernel_config)
+        return
 
     # Validate machine configuration
     if hasattr(args, 'machine') and args.machine not in machine_config:
