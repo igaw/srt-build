@@ -23,6 +23,7 @@ system_config = {
     "base-tool-path": ".",
     "jobfiles-path": os.path.expanduser("~/.cache/srt-build/jobs"),
     "result-path": os.path.expanduser("~/.cache/srt-build/results"),
+    "database-path": os.path.expanduser("~/.cache/srt-build/jobs.db"),
 }
 
 kernel_config = {}

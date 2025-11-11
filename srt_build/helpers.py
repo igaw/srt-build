@@ -9,6 +9,11 @@ import jinja2
 import multiprocessing
 from logging import error, debug
 from .core import run_cmd
+from .database import (
+    save_job_ids_to_db,
+    get_jobs_from_db,
+    get_job_list_from_db,
+)
 
 
 def ensure_lavacli_available():
@@ -292,58 +297,22 @@ def process_test_files(ctx, td, job_ctx, testpath, duration, jobs):
 
 
 def save_job_ids(ctx, jobs, system_config):
-    """Save job IDs to file for later reference."""
+    """Save job IDs to database for later reference."""
     if jobs == []:
         print("no jobs")
         return
-    jobfile = f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs'
-    with open(jobfile, "a") as f:
-        f.write(f"{jobs[0]}: ")
-        f.write(" ".join(jobs))
-        f.write("\n")
+
+    machine = ctx.args.machine
+    save_job_ids_to_db(machine, jobs, system_config)
     print(f"job id: {jobs[0]}")
 
 
 def get_jobs(machine, job_id, system_config, batch=False):
-    """Get list of job IDs from saved job file."""
-    if not batch:
-        return [int(job_id)]
-
-    try:
-        jobfile = f'{system_config["jobfiles-path"]}/srt-build.{machine}.jobs'
-        with open(jobfile, "r") as f:
-            for line in f.readlines():
-                try:
-                    id_str = line.split(":")[0]
-                    n = int(id_str)
-                except Exception as exc:
-                    debug(f"Error parsing job id from line: {line} ({exc})")
-                    continue
-                if id_str and n == job_id:
-                    return [int(x.strip()) for x in line.split(":")[1].split(" ") if x]
-    except FileNotFoundError:
-        debug(f"No jobs file found for machine {machine} at {jobfile}")
-    except Exception as exc:
-        error(f"Error reading jobs file for machine {machine}: {exc}")
-    return [int(job_id)]
+    """Get list of job IDs from database."""
+    return get_jobs_from_db(machine, job_id, system_config, batch)
 
 
 def get_job_list(ctx, system_config):
-    """Get all job IDs for a machine."""
-    jobs = []
-    try:
-        jobfile = f'{system_config["jobfiles-path"]}/srt-build.{ctx.args.machine}.jobs'
-        with open(jobfile, "r") as f:
-            for line in f.readlines():
-                try:
-                    id = int(line.split(":")[0])
-                except Exception as exc:
-                    debug(f"Error parsing job id from line: {line} ({exc})")
-                    continue
-                jobs.append(id)
-    except FileNotFoundError:
-        # No jobs file exists yet for this machine
-        debug(f"No jobs file found for machine {ctx.args.machine} at {jobfile}")
-    except Exception as exc:
-        error(f"Error reading jobs file for machine {ctx.args.machine}: {exc}")
-    return jobs
+    """Get all job IDs for a machine from database."""
+    machine = ctx.args.machine
+    return get_job_list_from_db(machine, system_config)

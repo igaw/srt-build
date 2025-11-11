@@ -8,6 +8,7 @@ import atexit
 import os
 import sys
 from .config import bcolors
+from .database import init_database
 
 
 def check_kernel_source_directory():
@@ -168,3 +169,6 @@ def setup(system_config):
     os.makedirs(system_config["base-build-path"], exist_ok=True)
     os.makedirs(system_config["jobfiles-path"], exist_ok=True)
     os.makedirs(system_config["result-path"], exist_ok=True)
+
+    # Initialize database
+    init_database(system_config)
