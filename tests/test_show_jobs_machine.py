@@ -10,10 +10,18 @@ print("Testing: ./srt-build-new lava bbb --show-jobs --testsuites smoke")
 print("=" * 80)
 
 result = subprocess.run(
-    [sys.executable, 'srt-build-new', 'lava', 'bbb', '--show-jobs', '--testsuites', 'smoke'],
-    cwd='/workspaces/srt-build',
+    [
+        sys.executable,
+        "srt-build-new",
+        "lava",
+        "bbb",
+        "--show-jobs",
+        "--testsuites",
+        "smoke",
+    ],
+    cwd="/workspaces/srt-build",
     capture_output=True,
-    text=True
+    text=True,
 )
 
 print(result.stdout)

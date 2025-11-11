@@ -1,4 +1,5 @@
 """Lava command - run LAVA tests with different kernel flavors."""
+
 import os
 import tempfile
 from shutil import copytree
@@ -20,26 +21,26 @@ from .cmd_install import cmd_install
 
 def add_parser(subparser):
     """Add lava command parser."""
-    lpsg = subparser.add_parser('lava')
-    lpsg.add_argument('machine', nargs='?', help='Target machine')
-    lpsg.add_argument('--skip-build', default=False, action='store_true')
-    lpsg.add_argument('--mods', default=False, action='store_true')
-    lpsg.add_argument('--duration', default=None)
-    lpsg.add_argument('--config-base', default='')
-    lpsg.add_argument('--tests')
-    lpsg.add_argument('--flavors')
-    lpsg.add_argument('--testsuites', default='smoke')
+    lpsg = subparser.add_parser("lava")
+    lpsg.add_argument("machine", nargs="?", help="Target machine")
+    lpsg.add_argument("--skip-build", default=False, action="store_true")
+    lpsg.add_argument("--mods", default=False, action="store_true")
+    lpsg.add_argument("--duration", default=None)
+    lpsg.add_argument("--config-base", default="")
+    lpsg.add_argument("--tests")
+    lpsg.add_argument("--flavors")
+    lpsg.add_argument("--testsuites", default="smoke")
     lpsg.add_argument(
-        '--list-tests',
+        "--list-tests",
         default=False,
-        action='store_true',
-        help='List all available test suites and tests'
+        action="store_true",
+        help="List all available test suites and tests",
     )
     lpsg.add_argument(
-        '--show-jobs',
+        "--show-jobs",
         default=False,
-        action='store_true',
-        help='Generate and display job definitions for test suite'
+        action="store_true",
+        help="Generate and display job definitions for test suite",
     )
     lpsg.set_defaults(func=cmd_lava)
     return lpsg
@@ -57,24 +58,24 @@ def build_flavor(ctx, fl, kernel_config):
 def extract_test_name(test_path, test_file):
     """Extract test name from template file."""
     try:
-        with open(test_path, 'r') as f:
+        with open(test_path, "r") as f:
             content = f.read()
-            for line in content.split('\n'):
-                if 'job_name' in line and '=' in line:
+            for line in content.split("\n"):
+                if "job_name" in line and "=" in line:
                     # Extract the value after '='
-                    parts = line.split('=', 1)
+                    parts = line.split("=", 1)
                     if len(parts) == 2:
                         value = parts[1].strip()
                         # Remove Jinja2 closing tag if present
-                        if '%}' in value:
-                            value = value.split('%}')[0].strip()
+                        if "%}" in value:
+                            value = value.split("%}")[0].strip()
                         # Remove quotes (both single and double)
                         value = value.strip("'\"")
                         return value
     except Exception:
         pass
     # Fallback to filename
-    return test_file.replace('.jinja2', '')
+    return test_file.replace(".jinja2", "")
 
 
 def list_tests_for_suite(item_path, testsuite):
@@ -82,10 +83,7 @@ def list_tests_for_suite(item_path, testsuite):
     print(f"  Test Suite: {testsuite}")
 
     try:
-        test_files = sorted([
-            f for f in os.listdir(item_path)
-            if f.endswith('.jinja2')
-        ])
+        test_files = sorted([f for f in os.listdir(item_path) if f.endswith(".jinja2")])
     except OSError:
         return
 
@@ -98,10 +96,10 @@ def list_tests_for_suite(item_path, testsuite):
 def list_available_tests(ctx):
     """List all available test suites and tests."""
     job_path = ctx.job_path
-    flavors = ['rt', 'nohz', 'vp', 'll', 'up', 'none']
+    flavors = ["rt", "nohz", "vp", "ll", "up", "none"]
 
     if ctx.args.flavors:
-        flavors = ctx.args.flavors.split(',')
+        flavors = ctx.args.flavors.split(",")
 
     print("\nAvailable Test Suites and Tests:")
     print("=" * 80)
@@ -133,11 +131,9 @@ def list_available_tests(ctx):
     print("\n" + "=" * 80)
     print("\nUsage examples:")
     print("  # Run smoke tests for rt flavor:")
-    print("  ./srt-build-new lava <machine> --flavors rt "
-          "--testsuites smoke")
+    print("  ./srt-build-new lava <machine> --flavors rt " "--testsuites smoke")
     print("\n  # Run specific test:")
-    print("  ./srt-build-new lava <machine> --flavors rt "
-          "--tests cyclictest")
+    print("  ./srt-build-new lava <machine> --flavors rt " "--tests cyclictest")
     print()
 
 
@@ -146,12 +142,14 @@ def show_generated_jobs(ctx):
     # Require machine for job generation
     if not ctx.args.machine:
         print("Error: machine argument is required for --show-jobs")
-        print("Usage: ./srt-build-new lava <machine> --show-jobs "
-              "[--flavors FLAVOR] [--testsuites SUITE]")
+        print(
+            "Usage: ./srt-build-new lava <machine> --show-jobs "
+            "[--flavors FLAVOR] [--testsuites SUITE]"
+        )
         return
 
     job_path = ctx.job_path
-    flavors = ['rt'] if not ctx.args.flavors else ctx.args.flavors.split(',')
+    flavors = ["rt"] if not ctx.args.flavors else ctx.args.flavors.split(",")
 
     print("\nGenerating Job Definitions:")
     print("=" * 80)
@@ -162,10 +160,8 @@ def show_generated_jobs(ctx):
 
     # Load job context for the machine
     try:
-        job_ctx = load_job_ctx(
-            ctx.job_path + '/boards/' + ctx.hostname + '.yaml'
-        )
-        job_ctx['tags'] = [ctx.hostname]
+        job_ctx = load_job_ctx(ctx.job_path + "/boards/" + ctx.hostname + ".yaml")
+        job_ctx["tags"] = [ctx.hostname]
     except Exception as e:
         print(f"\nError loading job context: {e}")
         return
@@ -185,10 +181,9 @@ def show_generated_jobs(ctx):
         print("-" * 80)
 
         try:
-            test_files = sorted([
-                f for f in os.listdir(testpath)
-                if f.endswith('.jinja2')
-            ])
+            test_files = sorted(
+                [f for f in os.listdir(testpath) if f.endswith(".jinja2")]
+            )
         except OSError as e:
             print(f"Error reading test directory: {e}")
             continue
@@ -203,8 +198,9 @@ def show_generated_jobs(ctx):
                 try:
                     job_yaml = generate_job(ctx.job_path, test_path, job_ctx)
                     import yaml
+
                     job_data = yaml.safe_load(job_yaml)
-                    if job_data.get('job_name') != ctx.args.tests:
+                    if job_data.get("job_name") != ctx.args.tests:
                         continue
                 except Exception:
                     if test_name != ctx.args.tests:
@@ -230,16 +226,15 @@ def show_generated_jobs(ctx):
     print()
 
 
-
 def cmd_lava(ctx, system_config, kernel_config):
     """Run LAVA tests with kernel builds for different flavors."""
     # Handle --list-tests flag
-    if hasattr(ctx.args, 'list_tests') and ctx.args.list_tests:
+    if hasattr(ctx.args, "list_tests") and ctx.args.list_tests:
         list_available_tests(ctx)
         return
 
     # Handle --show-jobs flag
-    if hasattr(ctx.args, 'show_jobs') and ctx.args.show_jobs:
+    if hasattr(ctx.args, "show_jobs") and ctx.args.show_jobs:
         show_generated_jobs(ctx)
         return
 
@@ -250,7 +245,7 @@ def cmd_lava(ctx, system_config, kernel_config):
         return
 
     ensure_lavacli_available()
-    ctx.args.config = ''
+    ctx.args.config = ""
 
     flavors = get_flavors(ctx)
     duration = None
@@ -264,15 +259,13 @@ def cmd_lava(ctx, system_config, kernel_config):
         build_flavor(ctx, fl, kernel_config)
 
         with tempfile.TemporaryDirectory() as td:
-            job_ctx = load_job_ctx(
-                ctx.job_path + '/boards/' + ctx.hostname + '.yaml'
-            )
-            job_ctx['kernel_url'] += ctx.args.postfix
-            job_ctx['tags'] = [ctx.hostname]
+            job_ctx = load_job_ctx(ctx.job_path + "/boards/" + ctx.hostname + ".yaml")
+            job_ctx["kernel_url"] += ctx.args.postfix
+            job_ctx["tags"] = [ctx.hostname]
 
             testpath = get_testpath(ctx, fl)
             process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
 
-            copytree(td, system_config['jobfiles-path'], dirs_exist_ok=True)
+            copytree(td, system_config["jobfiles-path"], dirs_exist_ok=True)
 
     save_job_ids(ctx, jobs, system_config)

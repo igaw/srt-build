@@ -12,7 +12,7 @@ def test_ctrl_c_graceful_interrupt():
     env["SRT_BUILD_TEST_SLEEP"] = "0.1"
 
     # Script that imports and patches main to raise KeyboardInterrupt
-    script = r'''
+    script = r"""
 import sys
 import os
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     except asyncio.CancelledError:
         print(f"{bcolors.WARNING}Operation cancelled. Exiting cleanly.{bcolors.ENDC}")
         sys.exit(130)
-'''
+"""
 
     proc = subprocess.Popen(
         [sys.executable, "-c", script],
