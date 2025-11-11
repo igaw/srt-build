@@ -11,6 +11,7 @@ from ..helpers import (
     get_testpath,
     process_test_files,
     save_job_ids,
+    generate_job,
 )
 from .cmd_config import cmd_config
 from .cmd_build import cmd_build
@@ -33,6 +34,12 @@ def add_parser(subparser):
         default=False,
         action='store_true',
         help='List all available test suites and tests'
+    )
+    lpsg.add_argument(
+        '--show-jobs',
+        default=False,
+        action='store_true',
+        help='Generate and display job definitions for test suite'
     )
     lpsg.set_defaults(func=cmd_lava)
     return lpsg
@@ -134,11 +141,106 @@ def list_available_tests(ctx):
     print()
 
 
+def show_generated_jobs(ctx):
+    """Generate and display job definitions for a test suite."""
+    # Require machine for job generation
+    if not ctx.args.machine:
+        print("Error: machine argument is required for --show-jobs")
+        print("Usage: ./srt-build-new lava <machine> --show-jobs "
+              "[--flavors FLAVOR] [--testsuites SUITE]")
+        return
+
+    job_path = ctx.job_path
+    flavors = ['rt'] if not ctx.args.flavors else ctx.args.flavors.split(',')
+
+    print("\nGenerating Job Definitions:")
+    print("=" * 80)
+    print(f"Machine: {ctx.args.machine} ({ctx.hostname})")
+    print(f"Flavors: {', '.join(flavors)}")
+    print(f"Test Suites: {ctx.args.testsuites}")
+    print("=" * 80)
+
+    # Load job context for the machine
+    try:
+        job_ctx = load_job_ctx(
+            ctx.job_path + '/boards/' + ctx.hostname + '.yaml'
+        )
+        job_ctx['tags'] = [ctx.hostname]
+    except Exception as e:
+        print(f"\nError loading job context: {e}")
+        return
+
+    total_jobs = 0
+
+    for flavor in flavors:
+        testpath = os.path.join(job_path, flavor)
+        if ctx.args.testsuites:
+            testpath = os.path.join(testpath, ctx.args.testsuites)
+
+        if not os.path.exists(testpath):
+            print(f"\nWarning: Test path does not exist: {testpath}")
+            continue
+
+        print(f"\n{flavor.upper()} Flavor - {ctx.args.testsuites}:")
+        print("-" * 80)
+
+        try:
+            test_files = sorted([
+                f for f in os.listdir(testpath)
+                if f.endswith('.jinja2')
+            ])
+        except OSError as e:
+            print(f"Error reading test directory: {e}")
+            continue
+
+        for test_file in test_files:
+            test_path = os.path.join(testpath, test_file)
+            test_name = extract_test_name(test_path, test_file)
+
+            # Filter by specific test if requested
+            if ctx.args.tests:
+                # Load and parse to get actual job_name
+                try:
+                    job_yaml = generate_job(ctx.job_path, test_path, job_ctx)
+                    import yaml
+                    job_data = yaml.safe_load(job_yaml)
+                    if job_data.get('job_name') != ctx.args.tests:
+                        continue
+                except Exception:
+                    if test_name != ctx.args.tests:
+                        continue
+
+            print(f"\n--- Job: {test_name} ---")
+            print(f"Template: {test_file}")
+
+            try:
+                # Generate the job
+                job_yaml = generate_job(ctx.job_path, test_path, job_ctx)
+                print("\nGenerated Job Definition:")
+                print("-" * 40)
+                print(job_yaml)
+                print("-" * 40)
+                total_jobs += 1
+            except Exception as e:
+                print(f"Error generating job: {e}")
+                continue
+
+    print("\n" + "=" * 80)
+    print(f"Total jobs generated: {total_jobs}")
+    print()
+
+
+
 def cmd_lava(ctx, system_config, kernel_config):
     """Run LAVA tests with kernel builds for different flavors."""
     # Handle --list-tests flag
     if hasattr(ctx.args, 'list_tests') and ctx.args.list_tests:
         list_available_tests(ctx)
+        return
+
+    # Handle --show-jobs flag
+    if hasattr(ctx.args, 'show_jobs') and ctx.args.show_jobs:
+        show_generated_jobs(ctx)
         return
 
     # Validate machine argument is provided for normal operation

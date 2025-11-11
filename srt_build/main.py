@@ -88,10 +88,11 @@ def main():
         (args.func in kernel_commands) or
         (args.func == cmd_config.cmd_config and not getattr(args, 'list', False))
     )
-    # Exception: lava --list-tests doesn't need kernel source
-    if (args.func == cmd_lava.cmd_lava and
-            hasattr(args, 'list_tests') and args.list_tests):
-        need_kernel_source = False
+    # Exceptions: lava --list-tests and --show-jobs don't need kernel source
+    if args.func == cmd_lava.cmd_lava:
+        if (hasattr(args, 'list_tests') and args.list_tests) or \
+           (hasattr(args, 'show_jobs') and args.show_jobs):
+            need_kernel_source = False
 
     if need_kernel_source:
         check_kernel_source_directory()
@@ -112,6 +113,23 @@ def main():
         args_copy.machine = dummy_machine
         ctx = Context(args_copy, machine_config, system_config)
         ctx.args = args  # Restore original args
+        cmd_lava.cmd_lava(ctx, system_config, kernel_config)
+        return
+
+    # Special handling for lava --show-jobs (requires machine but not kernel)
+    if (args.func == cmd_lava.cmd_lava and
+            hasattr(args, 'show_jobs') and args.show_jobs):
+        # Machine is required for --show-jobs
+        if not args.machine:
+            print("Error: machine argument is required for --show-jobs")
+            sys.exit(1)
+        # Validate machine exists
+        if args.machine not in machine_config:
+            from logging import error
+            error(f'No valid machine config found for "{args.machine}"')
+            sys.exit(1)
+        # Create context and run
+        ctx = Context(args, machine_config, system_config)
         cmd_lava.cmd_lava(ctx, system_config, kernel_config)
         return
 
