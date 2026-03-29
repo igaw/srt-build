@@ -1,3 +1,4 @@
+---
 job_name: {{ job_name }}
 device_type: {{ device_type }}
 timeouts:
@@ -10,35 +11,39 @@ timeouts:
 priority: medium
 visibility: public
 tags: {{ tags }}
+context:
+  extra_kernel_args: systemd.show_status=0 systemd.log_color=0
 
 actions:
-- deploy:
-    timeout:
-      minutes: 5
-    to: tftp
-    kernel:
-      url: {{ kernel_url }}
-      type: {{ kernel_type }}
+  - deploy:
+      timeout:
+        minutes: 5
+      to: tftp
+      kernel:
+        url: {{ kernel_url }}
+        type: {{ kernel_type }}
 {% if dtb_url %}
-    dtb:
-      url: {{ dtb_url }}
+      dtb:
+        url: {{ dtb_url }}
 {% endif %}
-    nfsrootfs:
-      url: {{ nfsroot_url }}
-    os: debian
-
-- boot:
-    timeout:
-      minutes: 5
-    method: {{ boot_method }}
-    commands: nfs
-    auto_login:
-      login_prompt: 'login:'
-      username: root
-    prompts:
-      - 'lava:'
-      - 'tw:'
-
-- test:
-{% block tests %}
-{% endblock tests -%}
+      nfsrootfs:
+        url: {{ nfsroot_url }}
+      os: debian
+  
+  - boot:
+      timeout:
+        minutes: 5
+      method: {{ boot_method }}
+      commands: nfs
+      auto_login:
+        login_prompt: 'login:'
+        username: root
+        login_commands:
+          - 'export TERM=dumb'
+          - 'export NO_COLOR=1'
+          - 'export PS1="lava: "'
+      prompts:
+        - 'lava:'
+  
+  - test:
+{{ self.tests() | default('  definitions: []') | indent(6, true) }}

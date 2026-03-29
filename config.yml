@@ -45,7 +45,7 @@ suites:
 machine_config:
   bbb:
     hostname: bbb
-    cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y mitigations=off"
+    cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y mitigations=off systemd.log_color=0 TERM=dumb"
     rootfs: bbb
     image: arch/arm/boot/zImage
     target: zImage
@@ -60,7 +60,7 @@ machine_config:
 
   c2d:
     hostname: c2d
-    cmdline: "console=ttyS0,115200n8 root=/dev/nfs rw nfsroot=192.168.60.5:/srv/nfs/{rootfs},nfsvers=3,tcp ip=dhcp earlyprintk printk.time=y oops=panic panic_on_warn mitigations=off"
+    cmdline: "console=ttyS0,115200n8 root=/dev/nfs rw nfsroot=192.168.60.5:/srv/nfs/{rootfs},nfsvers=3,tcp ip=dhcp earlyprintk printk.time=y oops=panic panic_on_warn mitigations=off systemd.log_color=0 TERM=dumb"
     rootfs: c2d
     image: arch/x86_64/boot/bzImage
     target: bzImage
@@ -73,7 +73,7 @@ machine_config:
 
   rpi3-32:
     hostname: rpi3-32
-    cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y mitigations=off"
+    cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y mitigations=off systemd.log_color=0 TERM=dumb"
     rootfs: rpi3-32
     image: arch/arm/boot/Image
     target: zImage
@@ -89,7 +89,7 @@ machine_config:
 
   rpi3-64:
     hostname: rpi3-64
-    cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y"
+    cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y systemd.log_color=0 TERM=dumb"
     rootfs: rpi3-64
     image: arch/arm64/boot/Image
     target: Image
