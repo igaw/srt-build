@@ -3,12 +3,12 @@ kernel_url: 'http://lava.lan:8080/artifacts/bbb/bbb-image'
 kernel_type: 'zimage'
 dtb_url: 'http://lava.lan:8080/artifacts/bbb/am335x-boneblack.dtb'
 #nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs/debian-armhf.tar'
-nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs/lava-image.armv7l-1.tar.xz'
+nfsroot_url: 'http://lava.lan:8080/lava-artifacts/v4.19.325-rt140/lava-image.armv7l-1.tar.xz'
 boot_method: 'u-boot'
 
 # test_definitions_url: '/var/lib/lava/artifacts/test-definitions.git'
 #test_definitions_url: https://github.com/igaw/test-definitions.git
-test_definitions_url: git://git.lan/test-definitions
+test_definitions_url: git://lava.lan/test-definitions.git
 test_definitions_branch: 'master'
 
 artifactorial_url: http://artifactory.lan:8000/artifacts/rt-tests/

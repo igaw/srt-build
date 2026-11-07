@@ -75,17 +75,17 @@ machine_config:
     hostname: rpi3-32
     cmdline: "console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.19.5:/{rootfs},nfsvers=4,tcp ip=dhcp earlyprintk printk.time=y mitigations=off systemd.log_color=0 TERM=dumb"
     rootfs: rpi3-32
-    image: arch/arm/boot/Image
+    image: arch/arm/boot/zImage
     target: zImage
     defconfig: bcm2835_defconfig
     config: rpi3-32/config-min
-    dtb: arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb
+    dtb: arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb
     CROSS_COMPILE: arm-linux-gnu-
     ARCH: arm
     install:
-      default: "scp arch/arm/boot/zImage rpi3-32:/tmp ; scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb rpi3-32:/tmp"
-      tftp: "scp arch/arm/boot/zImage root@lava:/srv/tftp/rpi3-32-image ; scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp"
-      lava: "scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/rpi3-32/rpi3-32-image{} ; scp arch/arm/boot/dts/bcm2837-rpi-3-b-plus.dtb root@lava:/srv/www/htdocs/artifacts/rpi3-32"
+      default: "scp arch/arm/boot/zImage rpi3-32:/tmp ; scp arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb rpi3-32:/tmp"
+      tftp: "scp arch/arm/boot/zImage root@lava:/srv/tftp/rpi3-32-image ; scp arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp"
+      lava: "scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/rpi3-32/rpi3-32-image{} ; scp arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb root@lava:/srv/www/htdocs/artifacts/rpi3-32"
 
   rpi3-64:
     hostname: rpi3-64
