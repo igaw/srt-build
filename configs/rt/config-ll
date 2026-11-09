@@ -1,1 +1,4 @@
-CONFIG_PREEMPT__LL=y
+# "Low-latency": the preemptible model without PREEMPT_RT. Called
+# PREEMPT__LL in the old RT trees; CONFIG_PREEMPT ("Preemptible Kernel
+# (Low-Latency Desktop)") since PREEMPT_RT is upstream.
+CONFIG_PREEMPT=y

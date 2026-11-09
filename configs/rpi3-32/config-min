@@ -1,2 +1,7 @@
 CONFIG_USB_LAN78XX=y
 CONFIG_DYNAMIC_DEBUG=y
+
+# The Pi 3 has 4 cores: bcm2835_defconfig builds UP (it also serves the
+# single-core ARMv6 Pi 1). ARMv7 only, which the Pi 3 is in 32-bit mode.
+CONFIG_SMP=y
+# CONFIG_ARCH_MULTI_V6 is not set
