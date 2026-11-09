@@ -137,7 +137,7 @@ def list_available_tests(ctx):
     print()
 
 
-def show_generated_jobs(ctx):
+def show_generated_jobs(ctx):  # noqa: C901 (one branch per job option)
     """Generate and display job definitions for a test suite."""
     # Require machine for job generation
     if not ctx.args.machine:

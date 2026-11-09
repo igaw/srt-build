@@ -48,7 +48,7 @@ def create_parser():
     return parser
 
 
-def main():
+def main():  # noqa: C901 (command dispatch, one branch per command)
     """Main entry point."""
     # Load configuration
     system_config, kernel_config, machine_config, rt_suites, suites = load_config()
@@ -81,11 +81,10 @@ def main():
         args.func == cmd_config.cmd_config and not getattr(args, "list", False)
     )
     # Exceptions: lava --list-tests and --show-jobs don't need kernel source
-    if args.func == cmd_lava.cmd_lava:
-        if (hasattr(args, "list_tests") and args.list_tests) or (
-            hasattr(args, "show_jobs") and args.show_jobs
-        ):
-            need_kernel_source = False
+    if args.func == cmd_lava.cmd_lava and (
+        getattr(args, "list_tests", False) or getattr(args, "show_jobs", False)
+    ):
+        need_kernel_source = False
 
     if need_kernel_source:
         check_kernel_source_directory()
@@ -159,9 +158,10 @@ def main():
 
             if args.func == cmd_jobs_list.cmd_jobs_list:
                 args.func(ctx, system_config)
-            elif args.func == cmd_jobs_results.cmd_jobs_results:
-                args.func(ctx, system_config, rt_suites, suites)
-            elif args.func == cmd_jobs_compare.cmd_jobs_compare:
+            elif args.func in (
+                cmd_jobs_results.cmd_jobs_results,
+                cmd_jobs_compare.cmd_jobs_compare,
+            ):
                 args.func(ctx, system_config, rt_suites, suites)
             elif args.func == cmd_jobs_cancel.cmd_jobs_cancel:
                 args.func(ctx, system_config)
@@ -180,7 +180,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         # Graceful Ctrl-C handling
         print(
-            f"{bcolors.WARNING}Interrupted by user (Ctrl-C). Exiting cleanly.{bcolors.ENDC}"
+            f"{bcolors.WARNING}Interrupted by user (Ctrl-C). "
+            f"Exiting cleanly.{bcolors.ENDC}"
         )
         # Use 130 (128 + SIGINT) as conventional exit code for Ctrl-C
         sys.exit(130)

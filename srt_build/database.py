@@ -28,7 +28,8 @@ def init_database(system_config):
     cursor = conn.cursor()
 
     # Create test_suites table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS test_suites (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             suite_id INTEGER NOT NULL,
@@ -36,28 +37,35 @@ def init_database(system_config):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             metadata TEXT
         )
-    """)
+    """
+    )
 
     # Create jobs table to store individual job IDs
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             test_suite_id INTEGER NOT NULL,
             job_id INTEGER NOT NULL,
             FOREIGN KEY (test_suite_id) REFERENCES test_suites(id)
         )
-    """)
+    """
+    )
 
     # Create index for faster lookups
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_machine
         ON test_suites(machine)
-    """)
+    """
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_suite_id
         ON test_suites(suite_id)
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()
@@ -65,10 +73,7 @@ def init_database(system_config):
 
 
 def save_job_ids_to_db(
-    machine: str,
-    jobs: List[int],
-    system_config,
-    metadata: Optional[str] = None
+    machine: str, jobs: List[int], system_config, metadata: Optional[str] = None
 ):
     """Save a test suite and its job IDs to the database.
 
@@ -89,19 +94,25 @@ def save_job_ids_to_db(
     try:
         # Insert test suite
         suite_id = jobs[0]
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO test_suites (suite_id, machine, metadata)
             VALUES (?, ?, ?)
-        """, (suite_id, machine, metadata))
+        """,
+            (suite_id, machine, metadata),
+        )
 
         test_suite_pk = cursor.lastrowid
 
         # Insert all job IDs
         for job_id in jobs:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO jobs (test_suite_id, job_id)
                 VALUES (?, ?)
-            """, (test_suite_pk, job_id))
+            """,
+                (test_suite_pk, job_id),
+            )
 
         conn.commit()
         msg = f"Saved test suite {suite_id} with {len(jobs)} jobs"
@@ -114,10 +125,7 @@ def save_job_ids_to_db(
 
 
 def get_jobs_from_db(
-    machine: str,
-    job_id: int,
-    system_config,
-    batch: bool = False
+    machine: str, job_id: int, system_config, batch: bool = False
 ) -> List[int]:
     """Get list of job IDs from the database.
 
@@ -144,12 +152,15 @@ def get_jobs_from_db(
 
     try:
         # Find the test suite
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id FROM test_suites
             WHERE machine = ? AND suite_id = ?
             ORDER BY created_at DESC
             LIMIT 1
-        """, (machine, job_id))
+        """,
+            (machine, job_id),
+        )
 
         result = cursor.fetchone()
         if not result:
@@ -160,11 +171,14 @@ def get_jobs_from_db(
         test_suite_pk = result[0]
 
         # Get all jobs for this test suite
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT job_id FROM jobs
             WHERE test_suite_id = ?
             ORDER BY id
-        """, (test_suite_pk,))
+        """,
+            (test_suite_pk,),
+        )
 
         jobs = [row[0] for row in cursor.fetchall()]
         return jobs if jobs else [int(job_id)]
@@ -196,11 +210,14 @@ def get_job_list_from_db(machine: str, system_config) -> List[int]:
     cursor = conn.cursor()
 
     try:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT suite_id FROM test_suites
             WHERE machine = ?
             ORDER BY created_at
-        """, (machine,))
+        """,
+            (machine,),
+        )
 
         jobs = [row[0] for row in cursor.fetchall()]
         return jobs

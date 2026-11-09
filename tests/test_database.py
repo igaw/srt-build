@@ -46,8 +46,24 @@ def test_database():
         jobs2 = [168, 168]
         save_job_ids_to_db(machine, jobs2, test_config)
 
-        jobs3 = [181, 181, 182, 183, 184, 185, 186, 187, 188, 189,
-                 190, 191, 192, 193, 194, 195]
+        jobs3 = [
+            181,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+        ]
         save_job_ids_to_db(machine, jobs3, test_config)
         print(f"  Saved test suite {jobs3[0]} with {len(jobs3)} jobs")
 
@@ -96,5 +112,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

@@ -6,9 +6,9 @@ import sys
 def test_lava_list_tests():
     """Test lava --list-tests functionality."""
     script_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "srt-build-new")
+        os.path.join(os.path.dirname(__file__), "..", "srt-build")
     )
-    assert os.path.exists(script_path), "srt-build-new script not found"
+    assert os.path.exists(script_path), "srt-build script not found"
 
     result = subprocess.run(
         [sys.executable, script_path, "lava", "--list-tests"],
@@ -30,7 +30,7 @@ def test_lava_list_tests():
 def test_lava_list_tests_with_flavor():
     """Test lava --list-tests with flavor filter."""
     script_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "srt-build-new")
+        os.path.join(os.path.dirname(__file__), "..", "srt-build")
     )
 
     result = subprocess.run(
@@ -51,7 +51,7 @@ def test_lava_list_tests_with_flavor():
 def test_lava_show_jobs_requires_machine():
     """Test that --show-jobs requires machine argument."""
     script_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "srt-build-new")
+        os.path.join(os.path.dirname(__file__), "..", "srt-build")
     )
 
     result = subprocess.run(
@@ -71,7 +71,7 @@ def test_lava_show_jobs_requires_machine():
 def test_lava_show_jobs_with_machine():
     """Test lava --show-jobs with machine argument."""
     script_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "srt-build-new")
+        os.path.join(os.path.dirname(__file__), "..", "srt-build")
     )
 
     # Use a machine from config.yml
@@ -101,7 +101,7 @@ def test_lava_show_jobs_with_machine():
 def test_lava_help_shows_new_flags():
     """Test that help shows new flags."""
     script_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "srt-build-new")
+        os.path.join(os.path.dirname(__file__), "..", "srt-build")
     )
 
     result = subprocess.run(
@@ -119,25 +119,12 @@ def test_lava_help_shows_new_flags():
     print("✓ New flags appear in help!")
 
 
-if __name__ == "__main__":
-    print("Running lava command extension tests...\n")
+def test_extract_test_name():
+    """The job name comes from the template's job_name, not its file name."""
+    from srt_build.commands.cmd_lava import extract_test_name
 
-    try:
-        test_lava_help_shows_new_flags()
-        test_lava_list_tests()
-        test_lava_list_tests_with_flavor()
-        test_lava_show_jobs_requires_machine()
-        test_lava_show_jobs_with_machine()
-
-        print("\n" + "=" * 60)
-        print("✓ All tests passed!")
-        print("=" * 60)
-    except AssertionError as e:
-        print(f"\n✗ Test failed: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n✗ Unexpected error: {e}")
-        import traceback
-
-        traceback.print_exc()
-        sys.exit(1)
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "jobs", "rt", "smoke", "0005-cyclictest.jinja2"
+    )
+    assert extract_test_name(path, "0005-cyclictest.jinja2") == "cyclictest"
+    assert extract_test_name("/nonexistent", "0001-foo.jinja2") == "0001-foo"

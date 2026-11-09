@@ -6,8 +6,7 @@ import sys
 import shutil
 import yaml
 import jinja2
-import multiprocessing
-from logging import error, debug
+from logging import error
 from .core import run_cmd
 from .database import (
     save_job_ids_to_db,

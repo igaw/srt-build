@@ -22,14 +22,10 @@ def handle_rt_results(test, job_ctx, rt_suites):
     max_latency = -1
     name = test["suite"].split("_")[-1]
     name = name.replace("-", "_")
-    if job_ctx and name in job_ctx:
-        if job_ctx[name] and "max_latency" in job_ctx[name]:
-            max_latency = int(job_ctx[name]["max_latency"])
+    if job_ctx and job_ctx.get(name) and "max_latency" in job_ctx[name]:
+        max_latency = int(job_ctx[name]["max_latency"])
 
-    if test["result"] == "pass":
-        passed = True
-    else:
-        passed = False
+    passed = test["result"] == "pass"
 
     if test["name"].endswith("max-latency") and measurement >= max_latency:
         passed = False

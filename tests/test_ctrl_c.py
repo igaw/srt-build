@@ -43,12 +43,13 @@ if __name__ == "__main__":
         def interrupt_after_delay():
             time.sleep(float(os.getenv("SRT_BUILD_TEST_SLEEP", "0.1")))
             raise KeyboardInterrupt()
-        
+
         # Call interrupt during main - this simulates Ctrl-C during execution
         interrupt_after_delay()
         main()
     except KeyboardInterrupt:
-        print(f"{bcolors.WARNING}Interrupted by user (Ctrl-C). Exiting cleanly.{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}Interrupted by user (Ctrl-C). "
+              f"Exiting cleanly.{bcolors.ENDC}")
         sys.exit(130)
     except asyncio.CancelledError:
         print(f"{bcolors.WARNING}Operation cancelled. Exiting cleanly.{bcolors.ENDC}")
