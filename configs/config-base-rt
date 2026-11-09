@@ -27,3 +27,6 @@ CONFIG_SCHED_HRTICK=y
 
 # cyclicdeadline dependency
 CONFIG_SCHED_DEBUG=y
+
+# pmqtest dependency (bcm2835_defconfig, used by rpi3-32, lacks it)
+CONFIG_POSIX_MQUEUE=y
