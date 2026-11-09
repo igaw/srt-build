@@ -42,9 +42,6 @@ actions:
           - 'export PS1="lava: "'
           - 'export TERM=dumb'
           - 'export NO_COLOR=1'
-          # The rootfs' resolved points at the old lab DNS (192.168.19.2);
-          # use the DNS server from the kernel's DHCP lease (ip=dhcp) instead.
-          - 'ln -sf /proc/net/pnp /etc/resolv.conf'
       prompts:
         - 'lava:'
   
