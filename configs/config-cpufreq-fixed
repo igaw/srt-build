@@ -1,0 +1,22 @@
+#
+# Fixed CPU frequency for latency testing: constant execution time
+# instead of maximum performance.
+#
+# Disabling CPU_FREQ is not enough: on x86 SCHED_MC_PRIO selects it, and
+# without a cpufreq driver the CPU runs at whatever clock the firmware
+# left. Keep cpufreq and allow only the performance governor, so every
+# policy is pinned to one P-state from boot on and nothing can change it.
+#
+CONFIG_CPU_FREQ=y
+CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y
+CONFIG_CPU_FREQ_GOV_PERFORMANCE=y
+# CONFIG_CPU_FREQ_GOV_POWERSAVE is not set
+# CONFIG_CPU_FREQ_GOV_USERSPACE is not set
+# CONFIG_CPU_FREQ_GOV_ONDEMAND is not set
+# CONFIG_CPU_FREQ_GOV_CONSERVATIVE is not set
+# CONFIG_CPU_FREQ_GOV_SCHEDUTIL is not set
+# (x86: intel_pstate/amd-pstate select schedutil on SMP; it is built but
+# never the default, so performance stays in charge.)
+
+# No boost/turbo frequencies (AMD core performance boost via acpi-cpufreq)
+# CONFIG_X86_ACPI_CPUFREQ_CPB is not set

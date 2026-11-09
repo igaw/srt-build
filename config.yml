@@ -7,19 +7,22 @@ kernel_config:
     - config-base-rt
     - config-rcu
     - rt/config-rt-trace
+    - config-cpufreq-fixed
   rt:
     - config-base-rt
     - config-rcu
     - rt/config-rt-trace
+    - config-cpufreq-fixed
   rtb:
     - config-base-rt
     - config-rcu
     - rt/config-rtb
-  up: ['rt/config-up']
-  vp: ['rt/config-vp']
-  ll: ['rt/config-ll']
-  nohz: ['rt/config-nohz']
-  none: ['rt/config-none']
+    - config-cpufreq-fixed
+  up: ['rt/config-up', 'config-cpufreq-fixed']
+  vp: ['rt/config-vp', 'config-cpufreq-fixed']
+  ll: ['rt/config-ll', 'config-cpufreq-fixed']
+  nohz: ['rt/config-nohz', 'config-cpufreq-fixed']
+  none: ['rt/config-none', 'config-cpufreq-fixed']
   blktests: ['config-blktests']
   nvme: ['config-nvme']
 
