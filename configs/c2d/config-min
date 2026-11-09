@@ -1,2 +1,9 @@
 CONFIG_NET_VENDOR_REALTEK=y
 CONFIG_R8169=y
+
+# ICH7 TCO watchdog: the BIOS leaves it running with an SMI on first
+# expiry, which stalls both CPUs for ~1 ms ~36 s after boot. The driver
+# takes the timer over and the SMI never fires.
+CONFIG_WATCHDOG=y
+CONFIG_LPC_ICH=y
+CONFIG_ITCO_WDT=y
