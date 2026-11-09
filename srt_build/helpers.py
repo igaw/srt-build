@@ -256,7 +256,7 @@ def get_flavors(ctx):
     """Get list of kernel flavors to build."""
     flavors = ["rt", "nohz", "vp", "ll", "up"]
     if ctx.args.flavors:
-        flavors = ctx.args.flavors.split(" ,")
+        flavors = [f.strip() for f in ctx.args.flavors.split(",") if f.strip()]
     return flavors
 
 
