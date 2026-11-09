@@ -1,0 +1,5 @@
+# Scheduler controlled ("lazy") preemption, new with 6.12-rt. Needs
+# ARCH_HAS_PREEMPT_LAZY: in 6.12 only x86 among our boards, so the ARM
+# boards skip this flavor (config.yml); there Kconfig would silently fall
+# back to another model.
+CONFIG_PREEMPT_LAZY=y

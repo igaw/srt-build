@@ -253,11 +253,19 @@ def generate_split_files(td, job, devicename, duration):
 
 
 def get_flavors(ctx):
-    """Get list of kernel flavors to build."""
-    flavors = ["rt", "nohz", "vp", "ll", "up"]
+    """Get list of kernel flavors to build.
+
+    Flavors listed in the machine's skip_flavors (config.yml) are left
+    out, e.g. "up" on arm64, which can't build a uniprocessor kernel.
+    """
+    flavors = ["rt", "nohz", "vp", "ll", "up", "lazy"]
     if ctx.args.flavors:
         flavors = [f.strip() for f in ctx.args.flavors.split(",") if f.strip()]
-    return flavors
+    skip = getattr(ctx, "skip_flavors", None) or []
+    for f in flavors:
+        if f in skip:
+            print(f"Skipping flavor {f}: not supported on {ctx.hostname}")
+    return [f for f in flavors if f not in skip]
 
 
 def prepare_build_for_flavor(ctx, fl):

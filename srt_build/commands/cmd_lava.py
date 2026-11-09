@@ -96,7 +96,7 @@ def list_tests_for_suite(item_path, testsuite):
 def list_available_tests(ctx):
     """List all available test suites and tests."""
     job_path = ctx.job_path
-    flavors = ["rt", "nohz", "vp", "ll", "up", "none"]
+    flavors = ["rt", "nohz", "vp", "ll", "up", "lazy", "none"]
 
     if ctx.args.flavors:
         flavors = ctx.args.flavors.split(",")

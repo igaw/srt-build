@@ -1,1 +1,5 @@
-CONFIG_NO_HZ=y
+# Full dynticks with the preemptible model. NO_HZ_IDLE (the old
+# CONFIG_NO_HZ) is what every non-rt flavor gets from the defconfigs
+# anyway, so test NO_HZ_FULL here.
+CONFIG_PREEMPT=y
+CONFIG_NO_HZ_FULL=y

@@ -1,1 +1,4 @@
-CONFIG_SMP=n
+# Uniprocessor kernel with the preemptible model. Not possible on arm64,
+# which always builds SMP (rpi3-64 skips this flavor, config.yml).
+# CONFIG_SMP is not set
+CONFIG_PREEMPT=y

@@ -23,6 +23,7 @@ kernel_config:
   ll: ['rt/config-ll', 'config-cpufreq-fixed']
   nohz: ['rt/config-nohz', 'config-cpufreq-fixed']
   none: ['rt/config-none', 'config-cpufreq-fixed']
+  lazy: ['rt/config-lazy', 'config-cpufreq-fixed']
   blktests: ['config-blktests']
   nvme: ['config-nvme']
 
@@ -57,6 +58,8 @@ machine_config:
     dtb: arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb
     CROSS_COMPILE: arm-linux-gnu-
     ARCH: arm
+    # Flavors this board can't build (see the configs/rt/config-* comments)
+    skip_flavors: [lazy]
     install:
       default: "scp arch/arm/boot/zImage bbb:/tmp ; scp arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb bbb:/tmp"
       lava: "scp arch/arm/boot/zImage root@lava:/srv/www/htdocs/artifacts/bbb/bbb-image{}; scp arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb root@lava:/srv/www/htdocs/artifacts/bbb/"
@@ -85,6 +88,8 @@ machine_config:
     dtb: arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb
     CROSS_COMPILE: arm-linux-gnu-
     ARCH: arm
+    # Flavors this board can't build (see the configs/rt/config-* comments)
+    skip_flavors: [lazy]
     install:
       default: "scp arch/arm/boot/zImage rpi3-32:/tmp ; scp arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb rpi3-32:/tmp"
       tftp: "scp arch/arm/boot/zImage root@lava:/srv/tftp/rpi3-32-image ; scp arch/arm/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp"
@@ -101,6 +106,8 @@ machine_config:
     dtb: arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb
     CROSS_COMPILE: aarch64-linux-gnu-
     ARCH: arm64
+    # Flavors this board can't build (see the configs/rt/config-* comments)
+    skip_flavors: [up, lazy]
     install:
       default: "scp arch/arm64/boot/Image rpi3-64:/tmp ; scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb rpi3-64:/tmp"
       tftp: "scp arch/arm64/boot/Image lava:/srv/tftp/rpi3-64-image ; scp arch/arm64/boot/dts/broadcom/bcm2837-rpi-3-b-plus.dtb lava:/srv/tftp"
