@@ -10,7 +10,7 @@ definitions:
   path: automated/linux/cyclictest/cyclictest.yaml
   name: cyclictest
   parameters:
-    PRIORITY: "{{ cyclictest.priority|default('98') }}"
+    RT_PRIORITY: "{{ cyclictest.priority|default('98') }}"
     INTERVAL: "{{ cyclictest.interval|default('1000') }}"
     THREADS: "{{ cyclictest.threads|default('1') }}"
     AFFINITY: "{{ cyclictest.affinity|default('0') }}"

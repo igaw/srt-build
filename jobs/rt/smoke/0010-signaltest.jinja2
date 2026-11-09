@@ -10,7 +10,7 @@ definitions:
   path: automated/linux/signaltest/signaltest.yaml
   name: signaltest
   parameters:
-    PRIORITY: "{{ signaltest.priority|default('98') }}"
+    RT_PRIORITY: "{{ signaltest.priority|default('98') }}"
     THREADS: "{{ signaltest.threads|default('2') }}"
     DURATION: "{{ signaltest.duration|default('1m') }}"
     BACKGROUND_CMD: "{{ signaltest.background_cmd|default('hackbench') }}"

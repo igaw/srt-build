@@ -10,7 +10,7 @@ definitions:
   path: automated/linux/rt-migrate-test/rt-migrate-test.yaml
   name: rt-migrate-test
   parameters:
-    PRIORITY: "{{ rt_migrate_test.priority|default('51') }}"
+    RT_PRIORITY: "{{ rt_migrate_test.priority|default('51') }}"
     DURATION: "{{ rt_migrate_test.duration|default('1m') }}"
     BACKGROUND_CMD: "{{ rt_migrate_test.background_cmd|default('hackbench') }}"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
