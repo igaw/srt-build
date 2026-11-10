@@ -1,10 +1,19 @@
 """Config command - configure kernel build."""
 
 import os
+import shutil
+import sys
+import tempfile
 from shutil import copyfile
 from ..core import run_cmd
-from ..helpers import run_make
+from ..helpers import get_flavors, run_make
 from ..config import bcolors
+from ..kconfig_check import (
+    not_applied,
+    parse_config,
+    preempt_summary,
+    requested_values,
+)
 
 
 def add_parser(subparser):
@@ -16,6 +25,12 @@ def add_parser(subparser):
     bcpsr.add_argument("--flavor", default="")
     bcpsr.add_argument(
         "--list", action="store_true", help="List available configurations and flavors"
+    )
+    bcpsr.add_argument(
+        "--check",
+        action="store_true",
+        help="configure every flavor (or --flavor) in a scratch directory and "
+        "report the preemption model and requested values that didn't apply",
     )
     bcpsr.set_defaults(func=cmd_config)
     return bcpsr
@@ -44,7 +59,7 @@ def _print_table(headers, rows):
 
 def _flavor_for_group(group):
     """Return flavor name for a kernel_config group, if applicable."""
-    flavor_groups = {"rt", "nohz", "vp", "ll", "up", "none"}
+    flavor_groups = {"rt", "nohz", "vp", "ll", "up", "lazy", "none"}
     return group if group in flavor_groups else ""
 
 
@@ -101,10 +116,91 @@ def _list_configs(ctx, kernel_config):
     _print_table(["Base Config", "Flavor", "Fragments"], krows)
 
 
+def _fragments(ctx, kernel_config, flavor):
+    """The config fragments in merge order, as cmd_config merges them."""
+    names = [ctx.config]
+    names += [c for c in kernel_config.get(ctx.args.config_base or "", []) if c]
+    if flavor:
+        names += [c for c in kernel_config.get(flavor, []) if c]
+    return names
+
+
+def _merge(ctx, fragments):
+    run_make(ctx, [ctx.defconfig])
+    for name in fragments:
+        run_cmd(
+            [
+                "scripts/kconfig/merge_config.sh",
+                "-m",
+                "-O",
+                ctx.build_path,
+                ctx.build_path + "/.config",
+                ctx.config_path + "/" + name,
+            ]
+        )
+        run_make(ctx, ["olddefconfig"])
+
+
+def _check_flavors(ctx, kernel_config):
+    """config --check: what each flavor's config really ends up as."""
+    flavors = [ctx.args.flavor] if ctx.args.flavor else get_flavors(ctx)
+    build_path = ctx.build_path
+    rows, problems = [], []
+    try:
+        for flavor in flavors:
+            scratch = tempfile.mkdtemp(prefix=f"srt-check-{ctx.hostname}-{flavor}-")
+            ctx.__dict__["build_path"] = scratch
+            try:
+                names = _fragments(ctx, kernel_config, flavor)
+                _merge(ctx, names)
+                with open(scratch + "/.config") as f:
+                    final = parse_config(f.read())
+            finally:
+                shutil.rmtree(scratch, ignore_errors=True)
+            texts = []
+            for name in names:
+                with open(ctx.config_path + "/" + name) as f:
+                    texts.append((name, f.read()))
+            missing = not_applied(requested_values(texts), final)
+            p = preempt_summary(final)
+            rows.append(
+                [
+                    flavor,
+                    p["model"],
+                    "y" if p["rt"] else "-",
+                    "y" if p["dynamic"] else "-",
+                    "y" if p["smp"] else "-",
+                    p["nohz"],
+                    p["hz"],
+                    str(len(missing)) if missing else "-",
+                ]
+            )
+            problems += [(flavor, *m) for m in missing]
+    finally:
+        ctx.__dict__["build_path"] = build_path
+
+    print(f"{bcolors.BOLD}{ctx.hostname}{bcolors.ENDC}")
+    _print_table(
+        ["flavor", "model", "RT", "dynamic", "SMP", "nohz", "HZ", "not applied"],
+        rows,
+    )
+    if problems:
+        print(
+            f"\n{bcolors.WARNING}Requested but not in the final config:"
+            f"{bcolors.ENDC}"
+        )
+        for flavor, sym, wanted, actual, fragment in problems:
+            print(f"  {flavor:6} {sym}={wanted} -> {actual}  ({fragment})")
+        sys.exit(1)
+
+
 def cmd_config(ctx, kernel_config):
     """Configure kernel build based on machine and flavor settings."""
     if getattr(ctx.args, "list", False):
         _list_configs(ctx, kernel_config)
+        return
+    if getattr(ctx.args, "check", False):
+        _check_flavors(ctx, kernel_config)
         return
     if not getattr(ctx.args, "config", None):
         run_make(ctx, [ctx.defconfig])

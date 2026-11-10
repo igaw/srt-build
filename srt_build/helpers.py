@@ -258,7 +258,7 @@ def get_flavors(ctx):
     out, e.g. "up" on arm64, which can't build a uniprocessor kernel.
     """
     flavors = ["rt", "nohz", "vp", "ll", "up", "lazy"]
-    if ctx.args.flavors:
+    if getattr(ctx.args, "flavors", None):
         flavors = [f.strip() for f in ctx.args.flavors.split(",") if f.strip()]
     skip = getattr(ctx, "skip_flavors", None) or []
     for f in flavors:
