@@ -1,2 +1,3 @@
-CONFIG_RCU_EXPERT=y
+# Offloading needs rcu_nocbs= (or nohz_full=) on the command line, see
+# config-base-rt. NO_HZ_FULL makes it available without RCU_EXPERT.
 CONFIG_RCU_NOCB_CPU=y

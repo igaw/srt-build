@@ -1,4 +1,4 @@
-# arm64 and kvm doesn't work for 5.9
+# Not needed for the RT tests
 # CONFIG_KVM is not set
 
 # Default settings
@@ -11,10 +11,15 @@
 CONFIG_DEBUG_ATOMIC_SLEEP=y
 
 # CPU frequency: see config-cpufreq-fixed (CPU_FREQ is forced on x86)
+# CPU_IDLE can't be disabled on x86 (ACPI_PROCESSOR selects it) nor on
+# arm64; the rt-isolcpus flavor limits the C-states on the kernel command line.
 # CONFIG_CPU_IDLE is not set
 
-# CONFIG_NO_HZ is not set
-CONFIG_HZ_PERIODIC=y
+# Full dynticks and RCU callback offloading built in, but only active
+# with nohz_full=/rcu_nocbs= on the command line: rt boots without them
+# (the tick then stops only on idle CPUs), rt-isolcpus, the same image, with
+# them on the isolated CPUs. See config.yml flavors.
+CONFIG_NO_HZ_FULL=y
 
 CONFIG_HZ_250=y
 CONFIG_HZ=250
@@ -23,6 +28,8 @@ CONFIG_SCHED_HRTICK=y
 
 # CONFIG_SUSPEND is not set
 # CONFIG_HIBERNATION is not set
+# Selected by some platforms (OMAP2+, several arm64 SoCs); SUSPEND and
+# HIBERNATION stay off there anyway.
 # CONFIG_PM is not set
 
 # cyclicdeadline dependency
