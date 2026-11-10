@@ -27,7 +27,12 @@ def handle_rt_results(test, job_ctx, rt_suites):
 
     passed = test["result"] == "pass"
 
-    if test["name"].endswith("max-latency") and measurement >= max_latency:
+    # max_latency stays -1 when the job context sets no limit: no check.
+    if (
+        test["name"].endswith("max-latency")
+        and max_latency >= 0
+        and measurement >= max_latency
+    ):
         passed = False
 
     if passed:
