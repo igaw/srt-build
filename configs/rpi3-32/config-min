@@ -5,3 +5,12 @@ CONFIG_DYNAMIC_DEBUG=y
 # single-core ARMv6 Pi 1). ARMv7 only, which the Pi 3 is in 32-bit mode.
 CONFIG_SMP=y
 # CONFIG_ARCH_MULTI_V6 is not set
+
+# SoC temperature (thermal_zone0) and the firmware's undervoltage
+# warnings, built in (jobs boot without modules), to rule out heat and
+# power in latency outliers
+CONFIG_THERMAL=y
+CONFIG_THERMAL_OF=y
+CONFIG_BCM2835_THERMAL=y
+CONFIG_HWMON=y
+CONFIG_SENSORS_RASPBERRYPI_HWMON=y

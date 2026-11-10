@@ -4,3 +4,12 @@ CONFIG_DYNAMIC_DEBUG=y
 # cpufreq driver built in (jobs boot without modules), see config-cpufreq-fixed
 CONFIG_CLK_RASPBERRYPI=y
 CONFIG_ARM_RASPBERRYPI_CPUFREQ=y
+
+# SoC temperature (thermal_zone0) and the firmware's undervoltage
+# warnings, built in (jobs boot without modules), to rule out heat and
+# power in latency outliers
+CONFIG_THERMAL=y
+CONFIG_THERMAL_OF=y
+CONFIG_BCM2835_THERMAL=y
+CONFIG_HWMON=y
+CONFIG_SENSORS_RASPBERRYPI_HWMON=y
