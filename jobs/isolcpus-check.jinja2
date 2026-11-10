@@ -5,8 +5,9 @@
 
   The tick check spins 5 s on the first isolated CPU without syscalls or
   forks ($SECONDS and [ are bash builtins) and counts that CPU's timer
-  interrupts (LOC on x86, arch_timer on arm): with nohz_full only the
-  1 Hz residual tick is left, without it HZ per second.
+  interrupts (LOC on x86, arch_timer on arm, summed: the Pi 3 has two
+  arch_timer lines and only one counts): with nohz_full only the 1 Hz
+  residual tick is left, without it HZ per second.
 
   The steps are plain YAML scalars: no ": " in them, or YAML makes the
   step a mapping (tests/test_job_templates.py checks).
@@ -28,7 +29,7 @@
       - lava-test-case rcu-offload --shell 'dmesg | grep -q "Offload RCU callbacks from CPUs:.{{ isolcpus }}\."'
       - lava-test-case irq-default-affinity --shell test $((0x$(tr -d , < /proc/irq/default_smp_affinity))) -eq {{ housekeeping_mask }}
 {% endif %}
-      - ticks() { awk -v c={{ isolcpus_first + 2 }} '/LOC:|arch_timer/ { print $c; exit }' /proc/interrupts; }
+      - ticks() { awk -v c={{ isolcpus_first + 2 }} '/LOC:|arch_timer/ { n += $c } END { print n }' /proc/interrupts; }
       - before=$(ticks)
       - taskset -c {{ isolcpus_first }} bash -c 'end=$((SECONDS + 5)); while [ $SECONDS -lt $end ]; do :; done'
       - after=$(ticks)
