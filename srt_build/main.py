@@ -68,6 +68,15 @@ def main():  # noqa: C901 (command dispatch, one branch per command)
         with contextlib.suppress(Exception):
             time.sleep(float(_sleep))
 
+    # jobs report / watch take any number of boards (or none). They don't
+    # use the event loop, so they run before setup(): its signal handlers
+    # only fire while the loop runs, and watch mostly sleeps.
+    if getattr(args, "jobs_cmd", None) in ("report", "watch"):
+        if args.debug:
+            logging.basicConfig(level=logging.DEBUG)
+        args.func(args, system_config, machine_config)
+        return
+
     # Determine if kernel source directory is required for this invocation
     kernel_commands = [
         cmd_build.cmd_build,
