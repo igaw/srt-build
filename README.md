@@ -30,6 +30,28 @@ commands exit with 1 if any job has a problem.
 does, and the report when all jobs have finished and no new one came
 for `--settle` seconds (default 600).
 
+## Debugging on a board
+
+    srt-build jobs hack 67 --minutes 90   # boot like job 67, keep it up
+    ssh root@<address>                    # printed once the board is up
+
+`jobs hack` takes the deploy and boot actions of an existing LAVA job
+(same board, kernel, dtb and rootfs; `--kernel URL` swaps the kernel)
+and replaces its tests with an inline one that installs your SSH key
+(`--key`, default `~/.ssh/id_ed25519.pub`), starts sshd, prints the
+board's address and waits. `touch /tmp/hack-done` on the board ends the
+session early. It submits through the lavacli identity's XML-RPC, so
+lavacli itself needn't be installed.
+
+The tests run about 30 s after boot, and some effects only show then.
+`--file` copies local scripts to `/root` and `--run CMD` starts one
+right after boot, before the wait; its output lands in the job log:
+
+    srt-build jobs hack 67 --minutes 10 --file trace-run.sh \
+        --run "./trace-run.sh sv svsematest -q -t -a -p 98 -D 1m -b 1000"
+
+## Checking kernel configs
+
     srt-build config c2d --check          # in the kernel tree
 
 configures every flavor of the board in a scratch directory and shows
