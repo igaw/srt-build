@@ -145,6 +145,10 @@ def _check_flavors(ctx, kernel_config):
     """config --check: what each flavor's config really ends up as."""
     flavors = [ctx.args.flavor] if ctx.args.flavor else get_flavors(ctx)
     build_path = ctx.build_path
+    cross = ctx.CROSS_COMPILE
+    if cross and not shutil.which(cross + "gcc") and shutil.which("clang"):
+        print(f"no {cross}gcc, configuring with clang (LLVM=1)")
+        ctx.__dict__["LLVM"] = True
     rows, problems = [], []
     try:
         for flavor in flavors:
@@ -178,6 +182,7 @@ def _check_flavors(ctx, kernel_config):
             problems += [(flavor, *m) for m in missing]
     finally:
         ctx.__dict__["build_path"] = build_path
+        ctx.__dict__.pop("LLVM", None)
 
     print(f"{bcolors.BOLD}{ctx.hostname}{bcolors.ENDC}")
     _print_table(

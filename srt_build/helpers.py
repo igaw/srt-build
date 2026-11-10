@@ -94,7 +94,14 @@ def run_make(ctx, cmd):
     """Run make command with proper environment for cross-compilation."""
     ipath = ctx.build_path + "/mods"
     makecmd = ["INSTALL_MOD_PATH=" + ipath, "make", "O=" + ctx.build_path]
-    if ctx.CROSS_COMPILE:
+    if ctx.LLVM:
+        # config --check without the board's cross gcc: clang configures
+        # any architecture. Kconfig only asks the linker for its version,
+        # so the host ld will do when ld.lld is missing.
+        makecmd += ["LLVM=1", "ARCH=" + ctx.ARCH]
+        if not shutil.which("ld.lld"):
+            makecmd += ["LD=ld"]
+    elif ctx.CROSS_COMPILE:
         makecmd += ["CROSS_COMPILE=" + ctx.CROSS_COMPILE]
         makecmd += ["ARCH=" + ctx.ARCH]
     if ctx.CC:
