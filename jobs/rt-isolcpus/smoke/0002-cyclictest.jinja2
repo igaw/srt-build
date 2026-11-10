@@ -1,0 +1,24 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'cyclictest rt-isolcpus' %}
+
+{# One thread per isolated CPU; the background load stays on the
+   housekeeping CPUs. #}
+{% block tests %}
+definitions:
+- repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+  from: git
+  branch: {{ test_definitions_branch|default('master') }}
+  path: automated/linux/cyclictest/cyclictest.yaml
+  name: cyclictest
+  parameters:
+    AFFINITY: "{{ isolcpus }}"
+    ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+    ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+    BACKGROUND_CMD: "taskset -c {{ housekeeping_cpus }} {{ cyclictest.background_cmd|default('hackbench') }}"
+    DURATION: "{{ cyclictest.duration|default('1m') }}"
+    HISTOGRAM: "{{ cyclictest.histogram|default('') }}"
+    INTERVAL: "{{ cyclictest.interval|default('1000') }}"
+    RT_PRIORITY: "{{ cyclictest.priority|default('98') }}"
+    THREADS: "{{ isolcpus_count }}"
+{% endblock tests -%}

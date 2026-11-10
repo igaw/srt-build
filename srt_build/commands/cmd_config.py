@@ -59,7 +59,7 @@ def _print_table(headers, rows):
 
 def _flavor_for_group(group):
     """Return flavor name for a kernel_config group, if applicable."""
-    flavor_groups = {"rt", "nohz", "vp", "ll", "up", "lazy", "none"}
+    flavor_groups = {"rt", "nohz", "vp", "ll", "up", "lazy", "none"}  # fragments
     return group if group in flavor_groups else ""
 
 
@@ -143,7 +143,10 @@ def _merge(ctx, fragments):
 
 def _check_flavors(ctx, kernel_config):
     """config --check: what each flavor's config really ends up as."""
-    flavors = [ctx.args.flavor] if ctx.args.flavor else get_flavors(ctx)
+    if ctx.args.flavor:
+        flavors = [ctx.args.flavor]
+    else:
+        flavors = get_flavors(ctx, builds_only=True)
     build_path = ctx.build_path
     cross = ctx.CROSS_COMPILE
     if cross and not shutil.which(cross + "gcc") and shutil.which("clang"):

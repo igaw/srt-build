@@ -1,0 +1,34 @@
+{#
+  Checks that the CPU isolation of the kernel command line is in effect,
+  as an inline LAVA test. Included by rt-isolcpus and nohz; with_rcu_irq also
+  checks the RCU offloading and the default IRQ affinity.
+
+  The tick check spins 5 s on the first isolated CPU without syscalls or
+  forks ($SECONDS and [ are bash builtins) and counts that CPU's timer
+  interrupts (LOC on x86, arch_timer on arm): with nohz_full only the
+  1 Hz residual tick is left, without it HZ per second.
+#}
+{% macro definition(with_rcu_irq) %}
+- from: inline
+  name: isolcpus
+  path: inline/isolcpus.yaml
+  repository:
+    metadata:
+      format: Lava-Test Test Definition 1.0
+      name: isolcpus
+      description: "nohz_full and friends are in effect on CPUs {{ isolcpus }}"
+    run:
+      steps:
+      - cat /proc/cmdline
+      - lava-test-case nohz-full-cpus --shell test "$(cat /sys/devices/system/cpu/nohz_full)" = "{{ isolcpus }}"
+{% if with_rcu_irq %}
+      - lava-test-case rcu-offload --shell 'dmesg | grep -q "Offload RCU callbacks from CPUs: {{ isolcpus }}"'
+      - lava-test-case irq-default-affinity --shell test $((0x$(tr -d , < /proc/irq/default_smp_affinity))) -eq {{ housekeeping_mask }}
+{% endif %}
+      - ticks() { awk -v c={{ isolcpus_first + 2 }} '/LOC:|arch_timer/ { print $c; exit }' /proc/interrupts; }
+      - before=$(ticks)
+      - taskset -c {{ isolcpus_first }} bash -c 'end=$((SECONDS + 5)); while [ $SECONDS -lt $end ]; do :; done'
+      - after=$(ticks)
+      - echo "timer interrupts on CPU {{ isolcpus_first }} in 5 s busy loop: $((after - before))"
+      - lava-test-case tick-stopped --shell test $((after - before)) -lt 50
+{% endmacro %}

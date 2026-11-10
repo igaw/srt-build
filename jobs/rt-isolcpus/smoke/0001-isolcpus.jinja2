@@ -1,0 +1,11 @@
+{% extends 'job-base.jinja2' %}
+{% import 'isolcpus-check.jinja2' as check with context %}
+
+{% set job_name = 'isolcpus rt-isolcpus' %}
+
+{% block tests %}
+timeout:
+  minutes: 5
+definitions:
+{{ check.definition(true) }}
+{% endblock tests -%}

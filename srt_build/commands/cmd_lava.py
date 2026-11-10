@@ -4,6 +4,9 @@ import os
 import tempfile
 from shutil import copytree
 from ..helpers import (
+    DEFAULT_FLAVORS,
+    flavor_job_ctx,
+    flavor_kernel,
     ensure_lavacli_available,
     get_flavors,
     convert_to_seconds,
@@ -96,7 +99,7 @@ def list_tests_for_suite(item_path, testsuite):
 def list_available_tests(ctx):
     """List all available test suites and tests."""
     job_path = ctx.job_path
-    flavors = ["rt", "nohz", "vp", "ll", "up", "lazy", "none"]
+    flavors = DEFAULT_FLAVORS + ["none"]
 
     if ctx.args.flavors:
         flavors = ctx.args.flavors.split(",")
@@ -169,6 +172,7 @@ def show_generated_jobs(ctx):  # noqa: C901 (one branch per job option)
     total_jobs = 0
 
     for flavor in flavors:
+        flavor_job_ctx(ctx, flavor, job_ctx)
         testpath = os.path.join(job_path, flavor)
         if ctx.args.testsuites:
             testpath = os.path.join(testpath, ctx.args.testsuites)
@@ -255,13 +259,18 @@ def cmd_lava(ctx, system_config, kernel_config):
     jobs = []
 
     for fl in flavors:
-        prepare_build_for_flavor(ctx, fl)
-        build_flavor(ctx, fl, kernel_config)
+        kernel = flavor_kernel(fl)
+        prepare_build_for_flavor(ctx, kernel)
+        if kernel == fl:
+            build_flavor(ctx, fl, kernel_config)
+        else:
+            print(f"{fl}: boots the {kernel} kernel{ctx.args.postfix}")
 
         with tempfile.TemporaryDirectory() as td:
             job_ctx = load_job_ctx(ctx.job_path + "/boards/" + ctx.hostname + ".yaml")
             job_ctx["kernel_url"] += ctx.args.postfix
             job_ctx["tags"] = [ctx.hostname]
+            flavor_job_ctx(ctx, fl, job_ctx)
 
             testpath = get_testpath(ctx, fl)
             process_test_files(ctx, td, job_ctx, testpath, duration, jobs)

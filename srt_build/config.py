@@ -30,12 +30,12 @@ kernel_config = {}
 machine_config = {}
 rt_suites = []
 suites = []
+# Flavors that boot another flavor's kernel and/or add kernel arguments
+flavors = {}
 
 
-def load_config():
-    """Load configuration from YAML file."""
-    global system_config, kernel_config, machine_config, rt_suites, suites
-
+def _read_config():
+    """The first config.yml found, parsed ({} if none)."""
     config_candidates = [
         os.path.join(os.path.dirname(__file__), "..", "config.yml"),
         os.path.join(os.getcwd(), "config.yml"),
@@ -54,6 +54,14 @@ def load_config():
                         warning("failed to parse %s: %s", path, exc)
         except Exception as exc:
             warning("error while attempting to open %s: %s", path, exc)
+    return loaded_cfg
+
+
+def load_config():
+    """Load configuration from YAML file."""
+    global system_config, kernel_config, machine_config, rt_suites, suites
+
+    loaded_cfg = _read_config()
 
     # Override in-file defaults if user config provides entries
     if "system_config" in loaded_cfg:
@@ -66,5 +74,8 @@ def load_config():
         rt_suites = loaded_cfg["rt_suites"]
     if "suites" in loaded_cfg:
         suites = loaded_cfg["suites"]
+    if "flavors" in loaded_cfg:
+        flavors.clear()
+        flavors.update(loaded_cfg["flavors"] or {})
 
     return system_config, kernel_config, machine_config, rt_suites, suites

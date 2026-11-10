@@ -231,7 +231,7 @@ def generate_split_files(td, job, devicename, duration):
     job = yaml.safe_load(job)
 
     idx = _find_test_index(job)
-    tests = job["actions"][idx]["test"]["definitions"]
+    tests = job["actions"][idx]["test"]["definitions"] or []
 
     timeout = _initial_timeout(job, idx)
     if duration:
@@ -258,20 +258,92 @@ def generate_split_files(td, job, devicename, duration):
     return split_files
 
 
-def get_flavors(ctx):
-    """Get list of kernel flavors to build.
+DEFAULT_FLAVORS = ["rt", "rt-isolcpus", "nohz", "vp", "ll", "up", "lazy"]
+
+
+def flavor_kernel(fl):
+    """The flavor whose kernel fl boots: fl itself, or for a flavor like
+    rt-isolcpus (config.yml flavors) the one named by its kernel key."""
+    from . import config
+
+    return (config.flavors.get(fl) or {}).get("kernel", fl)
+
+
+def _needs_isolcpus(fl):
+    from . import config
+
+    return bool((config.flavors.get(fl) or {}).get("needs_isolcpus"))
+
+
+def flavor_kernel_args(ctx, fl):
+    """Extra kernel arguments for flavor fl on this board.
+
+    The flavor's kernel_args (config.yml flavors) with {isolcpus} and
+    {housekeeping} replaced by the board's isolcpus and
+    housekeeping_cpus, plus the board's own kernel_args for fl. On a
+    board without isolcpus, arguments that need them are left out.
+    """
+    from . import config
+
+    args = []
+    common = (config.flavors.get(fl) or {}).get("kernel_args", "")
+    isolcpus = getattr(ctx, "isolcpus", None)
+    housekeeping = getattr(ctx, "housekeeping_cpus", None)
+    if common and ("{isolcpus}" not in common or isolcpus):
+        args.append(common.format(isolcpus=isolcpus, housekeeping=housekeeping or "0"))
+    board = (getattr(ctx, "kernel_args", None) or {}).get(fl)
+    if board:
+        args.append(board)
+    return " ".join(args)
+
+
+def get_flavors(ctx, builds_only=False):
+    """Get list of kernel flavors to build or test.
 
     Flavors listed in the machine's skip_flavors (config.yml) are left
-    out, e.g. "up" on arm64, which can't build a uniprocessor kernel.
+    out, e.g. "up" on arm64, which can't build a uniprocessor kernel, as
+    are flavors that need isolated CPUs on a board without them.
+    builds_only: only flavors with a kernel of their own (not rt-isolcpus).
     """
-    flavors = ["rt", "nohz", "vp", "ll", "up", "lazy"]
+    flavors = list(DEFAULT_FLAVORS)
     if getattr(ctx.args, "flavors", None):
         flavors = [f.strip() for f in ctx.args.flavors.split(",") if f.strip()]
-    skip = getattr(ctx, "skip_flavors", None) or []
+    skip = list(getattr(ctx, "skip_flavors", None) or [])
+    if not getattr(ctx, "isolcpus", None):
+        skip += [f for f in flavors if _needs_isolcpus(f)]
     for f in flavors:
         if f in skip:
             print(f"Skipping flavor {f}: not supported on {ctx.hostname}")
-    return [f for f in flavors if f not in skip]
+    flavors = [f for f in flavors if f not in skip]
+    if builds_only:
+        flavors = [f for f in flavors if flavor_kernel(f) == f]
+    return flavors
+
+
+def flavor_job_ctx(ctx, fl, job_ctx):
+    """Add what the job templates need to know about flavor fl."""
+    job_ctx["kernel_args"] = flavor_kernel_args(ctx, fl)
+    isolcpus = getattr(ctx, "isolcpus", None)
+    job_ctx["isolcpus"] = isolcpus or ""
+    job_ctx["housekeeping_cpus"] = getattr(ctx, "housekeeping_cpus", None) or "0"
+    cpus = expand_cpus(isolcpus) if isolcpus else []
+    job_ctx["isolcpus_count"] = len(cpus)
+    job_ctx["isolcpus_first"] = cpus[0] if cpus else 0
+    hk = expand_cpus(job_ctx["housekeeping_cpus"])
+    job_ctx["housekeeping_mask"] = sum(1 << c for c in hk)
+    return job_ctx
+
+
+def expand_cpus(cpulist):
+    """[1, 2, 3] for "1-3"; also "0,2-3"."""
+    cpus = []
+    for part in str(cpulist).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        first, _, last = part.partition("-")
+        cpus += range(int(first), int(last or first) + 1)
+    return cpus
 
 
 def prepare_build_for_flavor(ctx, fl):

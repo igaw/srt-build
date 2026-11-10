@@ -12,7 +12,7 @@ priority: medium
 visibility: public
 tags: {{ tags }}
 context:
-  extra_kernel_args: systemd.show_status=0 systemd.log_color=0
+  extra_kernel_args: systemd.show_status=0 systemd.log_color=0{% if kernel_args %} {{ kernel_args }}{% endif %}
 
 actions:
   - deploy:

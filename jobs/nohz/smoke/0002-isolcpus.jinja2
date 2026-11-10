@@ -1,0 +1,14 @@
+{% extends 'job-base.jinja2' %}
+{% import 'isolcpus-check.jinja2' as check with context %}
+
+{% set job_name = 'isolcpus nohz' %}
+
+{# Only with nohz_full=, i.e. on boards with isolcpus #}
+{% block tests %}
+timeout:
+  minutes: 5
+definitions:
+{% if isolcpus %}
+{{ check.definition(false) }}
+{% endif %}
+{% endblock tests -%}
