@@ -95,3 +95,23 @@ class LavaApi:
     def jobs_after(self, job_id):
         """All jobs with an id greater than job_id, oldest first."""
         return self.get_all(f"jobs/?id__gt={int(job_id)}&ordering=id&limit=200")
+
+
+def rpc_from_lavacli(path=LAVACLI_CONFIG, identity="default"):
+    """XML-RPC proxy for a lavacli identity, for the few writes (submit,
+    cancel) the REST API doesn't do; no lavacli install needed."""
+    import xmlrpc.client
+
+    with open(path) as f:
+        cfg = yaml.safe_load(f) or {}
+    ident = cfg.get(identity)
+    if not ident or "uri" not in ident:
+        raise KeyError(f"no lavacli identity {identity!r} with a uri in {path}")
+    uri = urllib.parse.urlsplit(ident["uri"])
+    netloc = uri.netloc
+    if ident.get("username") and ident.get("token"):
+        user = urllib.parse.quote(ident["username"], safe="")
+        token = urllib.parse.quote(ident["token"], safe="")
+        netloc = f"{user}:{token}@{netloc}"
+    url = urllib.parse.urlunsplit((uri.scheme, netloc, uri.path, "", ""))
+    return xmlrpc.client.ServerProxy(url, allow_none=True)

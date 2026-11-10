@@ -32,3 +32,11 @@ def test_from_config_explicit_url():
     api = LavaApi.from_config({"lava-api": "https://lava.example.org/api/v0.2"})
     assert api.base == "https://lava.example.org/api/v0.2/"
     assert api.token is None
+
+
+def test_rpc_from_lavacli(tmp_path):
+    from srt_build.lava_api import rpc_from_lavacli
+
+    rpc = rpc_from_lavacli(write_cfg(tmp_path))
+    # ServerProxy keeps the host (with credentials) in a private attribute
+    assert rpc._ServerProxy__host == "x:abc@lava.lan:10070"
