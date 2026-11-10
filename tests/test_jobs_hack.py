@@ -63,3 +63,11 @@ def test_files_and_run_come_before_the_wait():
 def test_find_addresses_dedups():
     log = "SRT_HACK_ADDR=10.0.0.5\nx SRT_HACK_ADDR=10.0.0.5\nSRT_HACK_ADDR=${a%/*}"
     assert find_addresses(log) == ["10.0.0.5"]
+
+
+def test_kernel_args_are_added():
+    src = SRC + "context:\n  extra_kernel_args: systemd.show_status=0\n"
+    job = yaml.safe_load(hack_definition(src, "k", 5, kernel_args="nohz_full=1"))
+    assert job["context"]["extra_kernel_args"] == "systemd.show_status=0 nohz_full=1"
+    job = yaml.safe_load(hack_definition(SRC, "k", 5, kernel_args="nohz_full=1"))
+    assert job["context"]["extra_kernel_args"] == "nohz_full=1"

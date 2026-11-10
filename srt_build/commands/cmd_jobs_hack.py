@@ -51,6 +51,11 @@ def add_parser(subparser):
         "--kernel", metavar="URL", help="boot this kernel image instead of the job's"
     )
     p.add_argument(
+        "--kernel-args",
+        metavar="ARGS",
+        help="add ARGS to the kernel command line (e.g. a flavor's)",
+    )
+    p.add_argument(
         "--file",
         action="append",
         default=[],
@@ -85,7 +90,9 @@ def _copy_steps(files):
     return steps
 
 
-def hack_definition(definition, pubkey, minutes, kernel=None, files=None, run=None):
+def hack_definition(
+    definition, pubkey, minutes, kernel=None, files=None, run=None, kernel_args=None
+):
     """The hacking-session job for an existing job definition (YAML text).
 
     files: {name: bytes} to put in /root; run: command to run in /root
@@ -137,6 +144,11 @@ def hack_definition(definition, pubkey, minutes, kernel=None, files=None, run=No
         }
     }
     hack = copy.deepcopy(job)
+    if kernel_args:
+        context = dict(hack.get("context") or {})
+        extra = context.get("extra_kernel_args", "")
+        context["extra_kernel_args"] = f"{extra} {kernel_args}".strip()
+        hack["context"] = context
     hack["actions"] = actions + [test]
     hack["job_name"] = f"hack ({job.get('job_name', 'job')})"
     hack["timeouts"] = dict(hack.get("timeouts") or {})
@@ -177,7 +189,13 @@ def cmd_jobs_hack(args, system_config, machine_config):
         with open(os.path.expanduser(path), "rb") as f:
             files[os.path.basename(path)] = f.read()
     definition = hack_definition(
-        src["definition"], pubkey, args.minutes, args.kernel, files, args.run
+        src["definition"],
+        pubkey,
+        args.minutes,
+        args.kernel,
+        files,
+        args.run,
+        args.kernel_args,
     )
     if args.dry_run:
         print(definition)
