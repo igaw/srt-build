@@ -1,6 +1,10 @@
-# Realtime clock
-CONFIG_MFD_TPS6586X=y
-CONFIG_RTC_DRV_TPS6586X=y
+# The AM335x's own RTC (omap2plus_defconfig: module)
+CONFIG_RTC_DRV_OMAP=y
+
+# cpufreq-dt does the work (ti-cpufreq only picks the OPPs); a module in
+# omap2plus_defconfig, and the jobs boot without modules, so without this
+# config-cpufreq-fixed has nothing to pin.
+CONFIG_CPUFREQ_DT=y
 
 #
 # systemd dependencies
@@ -19,14 +23,13 @@ CONFIG_CRYPTO_USER_API_HASH=y
 CONFIG_CRYPTO_HMAC=y
 CONFIG_CRYPTO_SHA256=y
 
-CONFIG_UEVENT_HELPER_PATH=""
-CONFIG_DMIID=y
+# CONFIG_UEVENT_HELPER is not set
 
 CONFIG_BLK_DEV_BSG=y
 CONFIG_NET_NS=y
 CONFIG_USER_NS=y
 
-CONFIG_AUTOFS4_FS=y
+CONFIG_AUTOFS_FS=y
 CONFIG_TMPFS=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_TMPFS_POSIX_ACL=y
