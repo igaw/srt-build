@@ -1,7 +1,8 @@
 {#
   Checks that the CPU isolation of the kernel command line is in effect,
   as an inline LAVA test. Included by rt-isolcpus and nohz; with_rcu_irq also
-  checks the RCU offloading and the default IRQ affinity.
+  checks the RCU offloading, the default IRQ affinity and that the
+  scheduler keeps other tasks off the CPUs (isolcpus=domain).
 
   The tick check spins 5 s on the first isolated CPU without syscalls or
   forks ($SECONDS and [ are bash builtins) and counts that CPU's timer
@@ -28,6 +29,7 @@
 {% if with_rcu_irq %}
       - lava-test-case rcu-offload --shell 'dmesg | grep -q "Offload RCU callbacks from CPUs:.{{ isolcpus }}\."'
       - lava-test-case irq-default-affinity --shell test $((0x$(tr -d , < /proc/irq/default_smp_affinity))) -eq {{ housekeeping_mask }}
+      - lava-test-case domain-isolated --shell test "$(cat /sys/devices/system/cpu/isolated)" = "{{ isolcpus }}"
 {% endif %}
       - ticks() { awk -v c={{ isolcpus_first + 2 }} '/LOC:|arch_timer/ { n += $c } END { print n }' /proc/interrupts; }
       - before=$(ticks)

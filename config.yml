@@ -36,13 +36,17 @@ kernel_config:
 # A board's kernel_args: {flavor: args} adds board specific arguments.
 flavors:
   # rt tuned for isolated CPUs: the rt kernel, CPU 0 for housekeeping,
-  # the others without tick, RCU callbacks and unmanaged IRQs.
+  # the others without tick, RCU callbacks, unmanaged IRQs and other
+  # tasks. Without "domain" the scheduler still puts normal tasks
+  # (systemd, the test scripts) on the isolated CPUs, and 6.12's fair
+  # server runs them ahead of the measuring RT threads (rpi3-64:
+  # cyclictest hits of 0.5-1.2 ms).
   rt-isolcpus:
     kernel: rt
     needs_isolcpus: true
     kernel_args: >-
       nohz_full={isolcpus} rcu_nocbs={isolcpus} irqaffinity={housekeeping}
-      isolcpus=managed_irq,{isolcpus} skew_tick=1
+      isolcpus=domain,managed_irq,{isolcpus} skew_tick=1
   # Full dynticks needs nohz_full=; the kernel alone only stops the tick
   # on idle CPUs.
   nohz:
