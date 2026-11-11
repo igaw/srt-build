@@ -1,31 +1,34 @@
 kernel_config:
   nobase: ['']
-  "": ['config-base']
-  sle: ['config-sle']
+  "": ['config-base', 'config-no-rt-group-sched']
+  sle: ['config-sle', 'config-no-rt-group-sched']
   slert:
     - config-sle
     - config-base-rt
     - config-rcu
     - rt/config-rt-trace
     - config-cpufreq-fixed
+    - config-no-rt-group-sched
   rt:
     - config-base-rt
     - config-rcu
     - rt/config-rt-trace
     - config-cpufreq-fixed
+    - config-no-rt-group-sched
   rtb:
     - config-base-rt
     - config-rcu
     - rt/config-rtb
     - config-cpufreq-fixed
-  up: ['rt/config-up', 'config-cpufreq-fixed']
-  vp: ['rt/config-vp', 'config-cpufreq-fixed']
-  ll: ['rt/config-ll', 'config-cpufreq-fixed']
-  nohz: ['rt/config-nohz', 'config-cpufreq-fixed']
-  none: ['rt/config-none', 'config-cpufreq-fixed']
-  lazy: ['rt/config-lazy', 'config-cpufreq-fixed']
-  blktests: ['config-blktests']
-  nvme: ['config-nvme']
+    - config-no-rt-group-sched
+  up: ['rt/config-up', 'config-cpufreq-fixed', 'config-no-rt-group-sched']
+  vp: ['rt/config-vp', 'config-cpufreq-fixed', 'config-no-rt-group-sched']
+  ll: ['rt/config-ll', 'config-cpufreq-fixed', 'config-no-rt-group-sched']
+  nohz: ['rt/config-nohz', 'config-cpufreq-fixed', 'config-no-rt-group-sched']
+  none: ['rt/config-none', 'config-cpufreq-fixed', 'config-no-rt-group-sched']
+  lazy: ['rt/config-lazy', 'config-cpufreq-fixed', 'config-no-rt-group-sched']
+  blktests: ['config-blktests', 'config-no-rt-group-sched']
+  nvme: ['config-nvme', 'config-no-rt-group-sched']
 
 # Flavors with something besides config fragments:
 #   kernel: boot this flavor's kernel instead of building one

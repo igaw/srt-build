@@ -1,0 +1,12 @@
+#
+# No RT group scheduling, on every board and flavor.
+#
+# It gives every cgroup its own RT bandwidth and throttling, and RT
+# tasks in a group without bandwidth (systemd's default) can't run at
+# all; its period timer also only serves its own root domain, which
+# breaks with isolated CPUs (the FIXME in kernel/sched/rt.c). Not
+# something to test RT latencies with. omap2plus_defconfig and
+# bcm2835_defconfig (bbb, rpi3-32) turn it on, x86_64 and arm64
+# defconfig don't, so the boards weren't configured alike.
+#
+# CONFIG_RT_GROUP_SCHED is not set
