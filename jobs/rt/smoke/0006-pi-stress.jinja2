@@ -1,6 +1,11 @@
 {% extends 'job-base.jinja2' %}
 
 {% set job_name = 'pi-stress' %}
+{#- pi_stress runs its threads at SCHED_FIFO 1-4 and the medium one
+    busy-loops; RCU's kthreads (rcuc, rcub, rcu_preempt) default to
+    FIFO 1 and starve for the whole run (RCU stall, see
+    Documentation/RCU/stallwarn.rst). Put them above pi_stress. #}
+{% set kernel_args = ((kernel_args ~ ' ') if kernel_args else '') ~ 'rcutree.kthread_prio=5' %}
 
 {% block tests %}
 timeout:
