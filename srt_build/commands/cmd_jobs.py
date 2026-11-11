@@ -12,6 +12,7 @@ def add_parser(subparser):
         cmd_jobs_watch,
         cmd_jobs_hack,
         cmd_jobs_export,
+        cmd_jobs_dashboard,
     )
 
     jpsg = subparser.add_parser("jobs")
@@ -28,6 +29,7 @@ def add_parser(subparser):
     cmd_jobs_watch.add_parser(sjpsg)
     cmd_jobs_hack.add_parser(sjpsg)
     cmd_jobs_export.add_parser(sjpsg)
+    cmd_jobs_dashboard.add_parser(sjpsg)
 
     jpsg.set_defaults(func=cmd_jobs)
     return jpsg
