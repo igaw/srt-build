@@ -162,3 +162,16 @@ def test_summary_line_counts_unfinished():
 def test_id_lists():
     assert parse_id_list("13-15, 20,") == [13, 14, 15, 20]
     assert _id_ranges([9, 5, 6, 7, 11, 12]) == "5-7, 9, 11-12"
+
+
+def test_known_kernel_warning_is_no_finding():
+    from srt_build.report import scan_console
+
+    lines = [
+        "[    0.000000] WARNING: CPU: 0 PID: 0 at arch/arm/kernel/devtree.c:129 "
+        "arm_dt_init_cpu_maps+0xd0/0x15c",
+        "[   43.947336] rcu: INFO: rcu_preempt self-detected stall on CPU",
+    ]
+    assert scan_console(lines) == [
+        ("kernel", "rcu: INFO: rcu_preempt self-detected stall on CPU")
+    ]

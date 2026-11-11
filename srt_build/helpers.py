@@ -9,6 +9,7 @@ import yaml
 import jinja2
 from logging import error
 from .core import run_cmd
+from .report import KNOWN_KERNEL_WARNINGS
 from .database import (
     save_job_ids_to_db,
     get_jobs_from_db,
@@ -350,6 +351,8 @@ def flavor_job_ctx(ctx, fl, job_ctx):
     job_ctx["flavor"] = fl
     job_ctx["kernel_describe"] = getattr(ctx, "kernel_describe", "") or ""
     job_ctx["srt_build"] = srt_build_version()
+    # Never empty: grep -vE "" would drop every line.
+    job_ctx["kernel_log_known"] = "|".join(KNOWN_KERNEL_WARNINGS) or "^$"
     job_ctx["kernel_args"] = flavor_kernel_args(ctx, fl)
     isolcpus = getattr(ctx, "isolcpus", None)
     job_ctx["isolcpus"] = isolcpus or ""

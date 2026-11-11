@@ -60,7 +60,10 @@ actions:
     a job whose test passes despite an RCU stall or a WARN still completes.
     Fail it here on anything in the kernel log that looks like a splat.
     "WARNING: CPU:" and not "WARNING:", which also starts plain printks
-    (bbb's "WARNING: Your 'console=ttyO0' has been replaced by 'ttyS0'"). #}
+    (bbb's "WARNING: Your 'console=ttyO0' has been replaced by 'ttyS0'").
+    Each splat has such a header line; its call trace is no finding of
+    its own, so the known ones (report.KNOWN_KERNEL_WARNINGS) can be left
+    out by their header. #}
   - test:
       timeout:
         minutes: 1
@@ -75,5 +78,6 @@ actions:
             description: "no stalls, warnings or oopses in the kernel log"
           run:
             steps:
-            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oops|[Cc]all [Tt]race|rcu: INFO|stall on CPU|blocked for more than"'
-            - lava-test-case kernel-log-clean --shell '! dmesg | grep -E "$KLOG_BAD"'
+            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oops|rcu: INFO|stall on CPU|blocked for more than"'
+            - 'export KLOG_OK="{{ kernel_log_known }}"'
+            - lava-test-case kernel-log-clean --shell '! dmesg | grep -E "$KLOG_BAD" | grep -vE "$KLOG_OK"'

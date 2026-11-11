@@ -38,6 +38,15 @@ SCAN_PATTERNS = [
     ("test", r"\S+: command not found"),
 ]
 _SCAN = [(kind, re.compile(rx)) for kind, rx in SCAN_PATTERNS]
+# Kernel warnings that are expected, as regexes on the warning's line;
+# the job template's kernel-log check leaves them out too. They may only
+# be here when they are harmless on every board.
+KNOWN_KERNEL_WARNINGS = [
+    # The up flavor (NR_CPUS=1) on a board with more CPUs in its device
+    # tree: "DT /cpu 2 nodes greater than max cores 1, capping them".
+    r"arm_dt_init_cpu_maps",
+]
+_KNOWN = re.compile("|".join(KNOWN_KERNEL_WARNINGS))
 # Details that differ between occurrences of the same problem.
 _NORMALIZE = re.compile(r"CPU: \d+ PID: \d+ ")
 _KERNEL_VERSION = re.compile(r"Linux version (\S+)")
@@ -84,6 +93,8 @@ def scan_console(lines):
     """
     found = []
     for line in lines:
+        if _KNOWN.search(line):
+            continue
         for kind, rx in _SCAN:
             m = rx.search(line)
             if m:
