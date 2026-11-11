@@ -3,7 +3,7 @@ job_name: {{ job_name }}
 device_type: {{ device_type }}
 timeouts:
   job:
-    minutes: 5
+    minutes: {{ 7 if boot_failure_retry else 5 }}
   action:
     minutes: 5
   connection:
@@ -41,6 +41,9 @@ actions:
   - boot:
       timeout:
         minutes: 5
+{% if boot_failure_retry %}
+      failure_retry: {{ boot_failure_retry }}
+{% endif %}
       method: {{ boot_method }}
       commands: nfs
       auto_login:

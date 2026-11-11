@@ -126,6 +126,7 @@ class JobSummary:
     no_results: list = field(default_factory=list)
     error: str = ""
     findings: list = field(default_factory=list)
+    retried: list = field(default_factory=list)
 
     @property
     def finished(self):
@@ -175,9 +176,14 @@ def summarize_job(job, tests, suites=None, log_text=None):
         health=job.get("health", ""),
     )
 
-    s.failed = sorted(
-        {t["name"] for t in tests if t["result"] == "fail"} - {"test-attachment", "job"}
-    )
+    # An action with failure_retry (bbb's boot) that failed and then
+    # passed has a fail and a pass case of the same name: retried, not
+    # failed.
+    failed = {t["name"] for t in tests if t["result"] == "fail"}
+    passed = {t["name"] for t in tests if t["result"] == "pass"}
+    failed -= {"test-attachment", "job"}
+    s.retried = sorted(failed & passed)
+    s.failed = sorted(failed - passed)
     uploads = [t for t in tests if t["name"] == "test-attachment"]
     s.uploads = len(uploads)
     s.uploads_failed = sum(t["result"] == "fail" for t in uploads)
@@ -257,7 +263,10 @@ def format_report(summaries):
                 health,
                 _fmt_latency(s),
                 _fmt_uploads(s),
-                "; ".join(s.problems()),
+                "; ".join(
+                    s.problems()
+                    + (["retried: " + ", ".join(s.retried)] if s.retried else [])
+                ),
             ]
         )
     widths = [len(h) for h in headers]

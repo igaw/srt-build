@@ -88,6 +88,26 @@ def test_metadata(monkeypatch, flavor):
         assert md["srt.build"]
 
 
+@pytest.mark.parametrize("board", sorted(CFG["machine_config"]))
+def test_boot_retry(monkeypatch, board):
+    """bbb boots again when U-Boot misses its PHY, with the job timeout
+    grown for it; the other boards boot once."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    ctx = SimpleNamespace(**{"hostname": board, **CFG["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, "rt", job_ctx)
+    for path in _templates("rt"):
+        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+        boot = next(a["boot"] for a in job["actions"] if "boot" in a)
+        if board == "bbb":
+            assert boot["failure_retry"] == 2
+            assert job["timeouts"]["job"] == {"minutes": 7}
+        else:
+            assert "failure_retry" not in boot
+            assert job["timeouts"]["job"] == {"minutes": 5}
+
+
 @pytest.mark.parametrize("flavor", FLAVORS)
 def test_steps_are_no_console_findings(monkeypatch, flavor):
     """LAVA echoes each step to the console, which `jobs report` scans:

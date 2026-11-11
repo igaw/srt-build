@@ -136,6 +136,23 @@ def test_failed_case_and_incomplete_job():
     ]
 
 
+def test_retried_boot_is_no_problem():
+    """bbb boots with failure_retry (U-Boot sometimes misses the PHY):
+    the failed attempt's cases stay, next to the passing ones."""
+    tests = [
+        case("uboot-action", "fail", suite=LAVA),
+        case("bootloader-commands", "fail", suite=LAVA),
+        case("uboot-action", suite=LAVA),
+        case("bootloader-commands", suite=LAVA),
+        case("t0-max-latency", measurement="99", unit="us"),
+    ]
+    s = summarize_job(job(), tests)
+    assert s.failed == []
+    assert s.retried == ["bootloader-commands", "uboot-action"]
+    assert s.problems() == []
+    assert "retried: bootloader-commands, uboot-action" in format_report([s])
+
+
 def test_unfinished_job_is_no_problem():
     s = summarize_job(job(health="Unknown", state="Running"), [])
     assert s.problems() == []

@@ -377,7 +377,9 @@ def build(lava_url):
         "Count",
         desc="health: job not Complete; failed: failed test cases (e.g. "
         "kernel-log-clean); uploads: failed uploads; no_results: a test "
-        "definition without results; console: kernel splats on the console.",
+        "definition without results; console: kernel splats on the console; "
+        "retried: actions that passed only on another attempt (bbb boot), "
+        "the job itself is fine.",
     )
     d.table(
         "srt-build versions",

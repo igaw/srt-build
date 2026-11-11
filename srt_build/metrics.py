@@ -10,7 +10,9 @@ VictoriaMetrics' /api/v1/import takes such old timestamps, so older
 rounds can be exported later the same way.
 
   srt_job_ok             1 if the job has no problem (`jobs report`)
-  srt_job_problems       number of problems, by kind
+  srt_job_problems       number of problems, by kind (and "retried":
+                         actions that passed on another attempt, not
+                         counted in srt_job_ok)
   srt_job_info           1, with the srt-build version that submitted it
   srt_latency_us         min/avg/max per thread, from LAVA's test cases
   srt_latency_bucket     cumulative histogram (le in us) per thread,
@@ -123,6 +125,7 @@ def job_samples(job, tests, summary, artifacts=None):
         ("uploads", summary.uploads_failed),
         ("no_results", len(summary.no_results)),
         ("console", len(summary.findings)),
+        ("retried", len(summary.retried)),  # not a problem, lab health
     ):
         out.append(_sample("srt_job_problems", {**labels, "kind": kind}, n, ts))
     srt_build = str(job_metadata(job).get("srt.build") or "unknown")

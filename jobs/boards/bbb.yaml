@@ -5,6 +5,12 @@ dtb_url: 'http://lava.lan:8080/artifacts/bbb/am335x-boneblack.dtb'
 #nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs/debian-armhf.tar'
 nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs-2026.11.09/lava-image.armv7l-1.tar.xz'
 boot_method: 'u-boot'
+# Now and then U-Boot finds no Ethernet PHY after power-on ("Could not
+# get PHY for cpsw: addr 0"), falls back to USB and the TFTP download
+# times out (jobs 329, 474), whatever the power-off time. Boot again
+# instead of losing the job: attempts in all. The job timeout grows by
+# 2 minutes for it (job-base). jobs report shows such jobs as retried.
+boot_failure_retry: 2
 
 # test_definitions_url: '/var/lib/lava/artifacts/test-definitions.git'
 #test_definitions_url: https://github.com/igaw/test-definitions.git
