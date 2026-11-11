@@ -72,7 +72,14 @@ class _Round:
             if job["state"] != "Finished" or job["id"] in self.reported:
                 continue
             try:
-                s = summarize_job(job, api.tests(job["id"]), api.suites(job["id"]))
+                # With the log, or console findings (a kernel splat in a
+                # job whose tests pass) would only show in the end report.
+                s = summarize_job(
+                    job,
+                    api.tests(job["id"]),
+                    api.suites(job["id"]),
+                    api.log(job["id"]),
+                )
             except OSError:
                 continue  # try again next poll
             self.reported.add(job["id"])
