@@ -16,6 +16,7 @@ import time
 
 from ..lava_api import LavaApi
 from ..report import summarize_job
+from .cmd_jobs_export import export_jobs, load_metrics_config
 from .cmd_jobs_report import (
     add_selection_args,
     fetch_summaries,
@@ -41,6 +42,11 @@ def add_parser(subparser):
     p.add_argument("-v", "--verbose", action="store_true", help="every job")
     p.add_argument("--save", metavar="DIR", help="save everything, as in report")
     p.add_argument("--no-report", action="store_true", help="no report at the end")
+    p.add_argument(
+        "--export",
+        action="store_true",
+        help="at the end, send the results to VictoriaMetrics (as jobs export)",
+    )
     p.set_defaults(func=cmd_jobs_watch)
     return p
 
@@ -92,6 +98,8 @@ class _Round:
 
 def cmd_jobs_watch(args, system_config, machine_config):
     api = LavaApi.from_config(system_config)
+    if args.export:
+        load_metrics_config(system_config)  # not only after hours of watching
     seen = _Round()
     while True:
         try:
@@ -107,6 +115,8 @@ def cmd_jobs_watch(args, system_config, machine_config):
         time.sleep(args.interval)
 
     print(f"all {len(jobs)} jobs finished", flush=True)
+    if args.export:
+        export_jobs(api, jobs, system_config)
     if args.no_report:
         return
     print()

@@ -68,10 +68,10 @@ def main():  # noqa: C901 (command dispatch, one branch per command)
         with contextlib.suppress(Exception):
             time.sleep(float(_sleep))
 
-    # jobs report / watch / hack take any number of boards (or none). They don't
-    # use the event loop, so they run before setup(): its signal handlers
-    # only fire while the loop runs, and watch mostly sleeps.
-    if getattr(args, "jobs_cmd", None) in ("report", "watch", "hack"):
+    # jobs report / watch / hack / export take any number of boards (or
+    # none). They don't use the event loop, so they run before setup(): its
+    # signal handlers only fire while the loop runs, and watch mostly sleeps.
+    if getattr(args, "jobs_cmd", None) in ("report", "watch", "hack", "export"):
         if args.debug:
             logging.basicConfig(level=logging.DEBUG)
         args.func(args, system_config, machine_config)

@@ -227,3 +227,44 @@ def get_job_list_from_db(machine: str, system_config) -> List[int]:
         return []
     finally:
         conn.close()
+
+
+def _exported_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS exported (
+            job_id INTEGER PRIMARY KEY,
+            samples INTEGER NOT NULL,
+            exported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+
+
+def get_exported_jobs(system_config) -> set:
+    """IDs of the LAVA jobs `jobs export` already sent."""
+    db_path = get_db_path(system_config)
+    if not os.path.exists(db_path):
+        return set()
+    conn = sqlite3.connect(db_path)
+    try:
+        _exported_table(conn)
+        return {row[0] for row in conn.execute("SELECT job_id FROM exported")}
+    finally:
+        conn.close()
+
+
+def mark_exported(job_id: int, samples: int, system_config):
+    """Note that job_id went out with that many samples."""
+    db_path = get_db_path(system_config)
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    try:
+        _exported_table(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO exported (job_id, samples) VALUES (?, ?)",
+            (int(job_id), int(samples)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
