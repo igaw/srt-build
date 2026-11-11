@@ -63,7 +63,10 @@ actions:
     (bbb's "WARNING: Your 'console=ttyO0' has been replaced by 'ttyS0'").
     Each splat has such a header line; its call trace is no finding of
     its own, so the known ones (report.KNOWN_KERNEL_WARNINGS) can be left
-    out by their header. #}
+    out by their header.
+    LAVA's shell echoes each step to the console (set -x), where `jobs
+    report` scans for kernel problems: Oop[s] and IN[F]O match what Oops
+    and INFO would, but the echoed step doesn't look like a finding. #}
   - test:
       timeout:
         minutes: 1
@@ -78,6 +81,6 @@ actions:
             description: "no stalls, warnings or oopses in the kernel log"
           run:
             steps:
-            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oops|rcu: INFO|stall on CPU|blocked for more than"'
+            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oop[s]|rcu: IN[F]O|stall on CPU|blocked for more than"'
             - 'export KLOG_OK="{{ kernel_log_known }}"'
             - lava-test-case kernel-log-clean --shell '! dmesg | grep -E "$KLOG_BAD" | grep -vE "$KLOG_OK"'

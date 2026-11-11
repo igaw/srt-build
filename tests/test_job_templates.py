@@ -86,3 +86,26 @@ def test_metadata(monkeypatch, flavor):
         assert md["srt.flavor"] == flavor
         assert md["srt.test"] == job["job_name"].split()[0]
         assert md["srt.build"]
+
+
+@pytest.mark.parametrize("flavor", FLAVORS)
+def test_steps_are_no_console_findings(monkeypatch, flavor):
+    """LAVA echoes each step to the console, which `jobs report` scans:
+    a step must not look like a kernel problem (the kernel-log check's
+    own patterns did, in round 6)."""
+    from srt_build.report import scan_console
+
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "rpi3-64"
+    ctx = SimpleNamespace(**{"hostname": board, **CFG["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, flavor, job_ctx)
+    for path in _templates(flavor):
+        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+        for action in job["actions"]:
+            for d in (action.get("test") or {}).get("definitions") or []:
+                repo = d.get("repository")
+                if isinstance(repo, dict):
+                    steps = ["+ " + s for s in repo.get("run", {}).get("steps", [])]
+                    assert scan_console(steps) == [], f"{path}: {steps}"
