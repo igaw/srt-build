@@ -49,3 +49,21 @@ def test_steps_are_strings(monkeypatch, board, flavor):
                     continue
                 for step in repo.get("run", {}).get("steps", []):
                     assert isinstance(step, str), f"{path}: {step!r}"
+
+
+@pytest.mark.parametrize("board", sorted(CFG["machine_config"]))
+@pytest.mark.parametrize("flavor", FLAVORS)
+def test_kernel_log_checked(monkeypatch, board, flavor):
+    """job-base appends the kernel-log check to every job: LAVA itself
+    only catches splats while booting."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    mc = CFG["machine_config"][board]
+    ctx = SimpleNamespace(**{"hostname": board, **mc})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", ctx.hostname + ".yaml"))
+    job_ctx["tags"] = [ctx.hostname]
+    flavor_job_ctx(ctx, flavor, job_ctx)
+    for path in _templates(flavor):
+        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+        last = job["actions"][-1].get("test") or {}
+        names = [d.get("name") for d in last.get("definitions") or []]
+        assert names == ["kernel-log"], f"{path}: {names}"

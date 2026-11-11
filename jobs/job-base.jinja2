@@ -47,3 +47,25 @@ actions:
   
   - test:
 {{ self.tests() | default('  definitions: []') | indent(6, true) }}
+
+{#- LAVA watches for kernel splats only while booting, not during the test:
+    a job whose test passes despite an RCU stall or a WARN still completes.
+    Fail it here on anything in the kernel log that looks like a splat.
+    "WARNING: CPU:" and not "WARNING:", which also starts plain printks
+    (bbb's "WARNING: Your 'console=ttyO0' has been replaced by 'ttyS0'"). #}
+  - test:
+      timeout:
+        minutes: 1
+      definitions:
+      - from: inline
+        name: kernel-log
+        path: inline/kernel-log.yaml
+        repository:
+          metadata:
+            format: Lava-Test Test Definition 1.0
+            name: kernel-log
+            description: "no stalls, warnings or oopses in the kernel log"
+          run:
+            steps:
+            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oops|[Cc]all [Tt]race|rcu: INFO|stall on CPU|blocked for more than"'
+            - lava-test-case kernel-log-clean --shell '! dmesg | grep -E "$KLOG_BAD"'
