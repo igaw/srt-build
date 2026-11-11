@@ -11,6 +11,14 @@ timeouts:
 priority: medium
 visibility: public
 tags: {{ tags }}
+{# What the job is, for `srt-build jobs export` and the dashboards; the
+    description (job_name) also has the flavor in it, srt.test doesn't. #}
+metadata:
+  srt.board: "{{ board }}"
+  srt.flavor: "{{ flavor }}"
+  srt.test: "{{ job_name.split(' ')[0] }}"
+  srt.kernel: "{{ kernel_describe }}"
+  srt.build: "{{ srt_build }}"
 context:
   extra_kernel_args: systemd.show_status=0 systemd.log_color=0{% if kernel_args %} {{ kernel_args }}{% endif %}
 

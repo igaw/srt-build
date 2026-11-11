@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import shutil
+import subprocess
 import yaml
 import jinja2
 from logging import error
@@ -320,8 +321,35 @@ def get_flavors(ctx, builds_only=False):
     return flavors
 
 
+def srt_build_version():
+    """srt-build's git commit, "-dirty" with local changes; "unknown"
+    outside a checkout. Goes into each job's metadata, so a round shows
+    which srt-build version submitted it."""
+    global _SRT_BUILD_VERSION
+    if _SRT_BUILD_VERSION is None:
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            out = subprocess.run(
+                ["git", "-C", repo, "describe", "--always", "--dirty", "--abbrev=12"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            _SRT_BUILD_VERSION = out.stdout.strip() or "unknown"
+        except (OSError, subprocess.CalledProcessError):
+            _SRT_BUILD_VERSION = "unknown"
+    return _SRT_BUILD_VERSION
+
+
+_SRT_BUILD_VERSION = None
+
+
 def flavor_job_ctx(ctx, fl, job_ctx):
     """Add what the job templates need to know about flavor fl."""
+    job_ctx["board"] = ctx.hostname
+    job_ctx["flavor"] = fl
+    job_ctx["kernel_describe"] = getattr(ctx, "kernel_describe", "") or ""
+    job_ctx["srt_build"] = srt_build_version()
     job_ctx["kernel_args"] = flavor_kernel_args(ctx, fl)
     isolcpus = getattr(ctx, "isolcpus", None)
     job_ctx["isolcpus"] = isolcpus or ""
@@ -352,7 +380,8 @@ def prepare_build_for_flavor(ctx, fl):
     ctx.args.postfix = "-" + fl
     (res, ref) = run_cmd(["git", "describe"])
     if not res:
-        ctx.args.postfix += "-" + ref.strip()
+        ctx.kernel_describe = ref.strip()
+        ctx.args.postfix += "-" + ctx.kernel_describe
 
 
 def get_testpath(ctx, fl):

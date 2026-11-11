@@ -67,3 +67,22 @@ def test_kernel_log_checked(monkeypatch, board, flavor):
         last = job["actions"][-1].get("test") or {}
         names = [d.get("name") for d in last.get("definitions") or []]
         assert names == ["kernel-log"], f"{path}: {names}"
+
+
+@pytest.mark.parametrize("flavor", FLAVORS)
+def test_metadata(monkeypatch, flavor):
+    """Every job says what it is, for `jobs export`: the test without the
+    flavor that job_name has in it."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "rpi3-64"
+    ctx = SimpleNamespace(**{"hostname": board, **CFG["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, flavor, job_ctx)
+    for path in _templates(flavor):
+        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+        md = job["metadata"]
+        assert md["srt.board"] == board
+        assert md["srt.flavor"] == flavor
+        assert md["srt.test"] == job["job_name"].split()[0]
+        assert md["srt.build"]
