@@ -178,11 +178,20 @@ def generate_file(job, testname, devicename):
 
 
 def _find_test_index(job):
-    """Find the test action index in job definition."""
+    """The index of the job's test action, the one running the test
+    definition from git: the first test action can be an inline one
+    of job-base.jinja2 (fair-server), whose timeout a long test would
+    then never get."""
+    first = None
     for idx, val in enumerate(job.get("actions", [])):
-        if "test" in val:
+        if "test" not in val:
+            continue
+        if first is None:
+            first = idx
+        defs = val["test"].get("definitions") or []
+        if any(d.get("from") == "git" for d in defs):
             return idx
-    return 0
+    return first or 0
 
 
 def _initial_timeout(job, idx):
@@ -420,8 +429,40 @@ def get_testpath(ctx, fl):
     return testpath
 
 
-def process_test_files(ctx, td, job_ctx, testpath, duration, jobs):
+def _submit(path, jobs):
+    (_, res) = run_cmd(["lavacli", "jobs", "submit", path])
+    jobs.append(str(res).strip())
+
+
+def combined_tests(ctx, fl):
+    """The flavor's tests for one combined job ([] for one job per test).
+
+    Only for the default suite (smoke), and not with --split or --tests.
+    """
+    from . import config
+    from .combined import entries
+
+    if getattr(ctx.args, "split", False) or ctx.args.tests:
+        return []
+    if (ctx.args.testsuites or "smoke") != "smoke":
+        return []
+    return entries(config.flavors.get(fl))
+
+
+def process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl=None):
     """Process all test template files in testpath."""
+    from . import combined
+
+    tests = combined_tests(ctx, fl) if fl else []
+    in_combined = {name for name, _ in tests}
+    if tests:
+        rendered = combined.render_templates(ctx.job_path, testpath, job_ctx)
+        job = combined.build(rendered, tests, fl, duration)
+        filename = f"{td}/test-combined-{fl}-{ctx.hostname}.yaml"
+        with open(filename, "w") as f:
+            yaml.dump(job, f, default_flow_style=False)
+        _submit(filename, jobs)
+
     for file in sorted(os.listdir(testpath)):
         if not file.endswith(".jinja2"):
             continue
@@ -432,11 +473,12 @@ def process_test_files(ctx, td, job_ctx, testpath, duration, jobs):
         j = yaml.safe_load(job)
         if ctx.args.tests and j["job_name"] != ctx.args.tests:
             continue
+        if j["job_name"] in in_combined:
+            continue
 
         files = generate_split_files(td, job, ctx.hostname, duration)
         for j in files:
-            (_, res) = run_cmd(["lavacli", "jobs", "submit", j])
-            jobs.append(str(res).strip())
+            _submit(j, jobs)
 
 
 def save_job_ids(ctx, jobs, system_config):

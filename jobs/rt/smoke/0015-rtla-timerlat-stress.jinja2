@@ -1,0 +1,23 @@
+{% extends 'job-base.jinja2' %}
+
+{% set job_name = 'rtla-timerlat-stress' %}
+
+{# rtla timerlat under a fixed stress-ng mix: one instance each of
+   stressors that load CPU, memory, page cache, loopback network, pipes,
+   context switches and process creation, all at normal priority. None
+   of them outranks the measurement (see doc/TUNING.md, "Stress tests");
+   files go to /tmp (tmpfs), not the NFS root. Fixed on purpose: the
+   same load every round. #}
+{% block tests %}
+definitions:
+- repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+  from: git
+  branch: {{ test_definitions_branch|default('master') }}
+  path: automated/linux/rtla/rtla-timerlat.yaml
+  name: rtla-timerlat-stress
+  parameters:
+    DURATION: "{{ (rtla_timerlat_stress|default({})).duration|default('1m') }}"
+    BACKGROUND_CMD: "stress-ng --oom-avoid --temp-path /tmp --cpu 1 --vm 1 --vm-bytes 10% --hdd 1 --hdd-bytes 32M --sock 1 --pipe 1 --switch 1 --fork 1"
+    ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+    ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endblock tests -%}

@@ -59,7 +59,9 @@ actions:
 {% if job_name.split(' ')[0] in fair_server_off_tests | default([]) %}
 {#- config.yml flavors: fair_server_off, for this test. The fair
     server's runtime per CPU, 0 switches it off; the check fails the
-    job if it is still on anywhere (or the knob is missing). #}
+    job if it is still on anywhere (or the knob is missing). The old
+    runtimes go to /tmp, for a combined job to switch it back on
+    (combined.py). #}
   - test:
       timeout:
         minutes: 1
@@ -75,7 +77,7 @@ actions:
           run:
             steps:
             - 'mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug'
-            - 'for f in /sys/kernel/debug/sched/fair_server/cpu*/runtime; do echo 0 > "$f"; done'
+            - 'for f in /sys/kernel/debug/sched/fair_server/cpu*/runtime; do c=$(basename $(dirname "$f")); cat "$f" > "/tmp/fair-server-$c"; echo 0 > "$f"; done'
             - lava-test-case fair-server-off --shell 'ls /sys/kernel/debug/sched/fair_server/cpu*/runtime >/dev/null && ! grep -qv "^0$" /sys/kernel/debug/sched/fair_server/cpu*/runtime'
 
 {% endif %}

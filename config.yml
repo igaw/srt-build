@@ -57,6 +57,24 @@ flavors:
   rt:
     fair_server_off:
       "v6.12.": [rtla-osnoise]
+    # The default round: all tests in one boot, in this order (lava
+    # --split: one boot per test). rtla first and for 5 minutes, the
+    # rt-tests for 1, timerlat under the fixed stress mix last.
+    # pi-stress keeps a boot of its own: it needs rcutree.kthread_prio
+    # and takes the board down when it goes wrong (round 9).
+    combined:
+      - settle
+      - rtla-timerlat: 5m
+      - rtla-osnoise: 5m
+      - cyclictest
+      - cyclicdeadline
+      - pmqtest
+      - ptsematest
+      - svsematest
+      - sigwaittest
+      - signaltest
+      - rt-migrate-test
+      - rtla-timerlat-stress: 5m
   # rt tuned for isolated CPUs: the rt kernel, CPU 0 for housekeeping,
   # the others without tick, RCU callbacks, unmanaged IRQs and other
   # tasks. Without "domain" the scheduler still puts normal tasks
@@ -69,6 +87,12 @@ flavors:
     kernel_args: >-
       nohz_full={isolcpus} rcu_nocbs={isolcpus} irqaffinity={housekeeping}
       isolcpus=domain,managed_irq,{isolcpus} skew_tick=1
+    combined:
+      - isolcpus rt-isolcpus
+      - settle
+      - rtla-timerlat rt-isolcpus: 5m
+      - rtla-osnoise rt-isolcpus: 5m
+      - cyclictest rt-isolcpus
   # Full dynticks needs nohz_full=; the kernel alone only stops the tick
   # on idle CPUs.
   nohz:
@@ -86,6 +110,7 @@ rt_suites:
   - '0_svsematest'
   - '0_rtla-osnoise'
   - '0_rtla-timelat'
+  - '0_rtla-timerlat-stress'
 
 suites:
   - '0_smoke-tests'

@@ -34,6 +34,12 @@ def add_parser(subparser):
     lpsg.add_argument("--flavors")
     lpsg.add_argument("--testsuites", default="smoke")
     lpsg.add_argument(
+        "--split",
+        default=False,
+        action="store_true",
+        help="one job (boot) per test, also for flavors with a combined job",
+    )
+    lpsg.add_argument(
         "--list-tests",
         default=False,
         action="store_true",
@@ -273,7 +279,7 @@ def cmd_lava(ctx, system_config, kernel_config):
             flavor_job_ctx(ctx, fl, job_ctx)
 
             testpath = get_testpath(ctx, fl)
-            process_test_files(ctx, td, job_ctx, testpath, duration, jobs)
+            process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl)
 
             copytree(td, system_config["jobfiles-path"], dirs_exist_ok=True)
 
