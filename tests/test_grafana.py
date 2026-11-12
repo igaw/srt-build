@@ -95,3 +95,14 @@ def test_detail_shows_one_board_flavor_and_test():
     for q in queries(d):
         if "panel" in q and "srt_" in q["expr"]:
             assert 'board="$board"' in q["expr"], q
+
+
+def test_only_tests_with_latencies_get_trends():
+    """smoke-tests, isolcpus and pi-stress have no latencies: no empty
+    panels for them, but their problems still count."""
+    for d in DASHBOARDS:
+        test = next(v for v in d["templating"]["list"] if v["name"] == "test")
+        assert "srt_latency_us" in test["definition"]
+    overview = ALL["rt-tests.json"]
+    problems = next(p for p in overview["panels"] if p["type"] == "table")
+    assert "$test" not in problems["targets"][0]["expr"]

@@ -25,6 +25,9 @@ DETAIL_UID = "rt-test-detail"
 
 # The overview's variables, as label matchers.
 SEL = 'board=~"$board", flavor=~"$flavor", test=~"$test", kernel=~"$kernel"'
+# For the job counts and problems: all tests, also those without
+# latencies (smoke-tests, isolcpus, pi-stress), which $test leaves out.
+JOBS = 'board=~"$board", flavor=~"$flavor", kernel=~"$kernel"'
 BY = "board, flavor, test"
 # The detail dashboard's: one board, flavor and test.
 ONE = 'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel"'
@@ -364,10 +367,10 @@ def build_overview(lava_url):
     MAX = f'max_over_time(srt_latency_us{{stat="max", {SEL}}}[$__range])'
 
     d.row("Summary")
-    d.stat("Jobs", f"count(max_over_time(srt_job_ok{{{SEL}}}[$__range]))", 0)
+    d.stat("Jobs", f"count(max_over_time(srt_job_ok{{{JOBS}}}[$__range]))", 0)
     d.stat(
         "Jobs with problems",
-        f"count(max_over_time(srt_job_ok{{{SEL}}}[$__range]) == 0) or vector(0)",
+        f"count(max_over_time(srt_job_ok{{{JOBS}}}[$__range]) == 0) or vector(0)",
         6,
         steps=[{"color": "green", "value": None}, {"color": "red", "value": 1}],
         desc="Failed health, failed test cases, failed uploads, definitions "
@@ -384,7 +387,7 @@ def build_overview(lava_url):
     d.stat(
         "srt-build versions",
         f"count(count by (srt_build) "
-        f"(max_over_time(srt_job_info{{{SEL}}}[$__range])))",
+        f"(max_over_time(srt_job_info{{{JOBS}}}[$__range])))",
         18,
         steps=[{"color": "green", "value": None}, {"color": "orange", "value": 2}],
         desc="More than one: the jobs were submitted by different srt-build "
@@ -394,7 +397,7 @@ def build_overview(lava_url):
     d.table(
         "Jobs with problems",
         f"max by ({BY}, kernel, job, kind) "
-        f"(max_over_time(srt_job_problems{{{SEL}}}[$__range])) > 0",
+        f"(max_over_time(srt_job_problems{{{JOBS}}}[$__range])) > 0",
         0,
         24,
         6,
@@ -449,12 +452,12 @@ def build_overview(lava_url):
             _var("flavor", 'label_values(srt_job_ok{board=~"$board"}, flavor)'),
             _var(
                 "test",
-                'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor"}, test)',
+                'label_values(srt_latency_us{board=~"$board", flavor=~"$flavor"}, '
+                "test)",
             ),
             _var(
                 "kernel",
-                'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor", '
-                'test=~"$test"}, kernel)',
+                'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor"}, kernel)',
             ),
         ],
         [{"title": "RT test detail", "url": f"/d/{DETAIL_UID}", "type": "link"}],
@@ -590,13 +593,14 @@ def build_detail(lava_url):
             _var("board", "label_values(srt_job_ok, board)", False, False),
             _var(
                 "flavor",
-                'label_values(srt_job_ok{board="$board"}, flavor)',
+                'label_values(srt_latency_us{board="$board"}, flavor)',
                 False,
                 False,
             ),
             _var(
                 "test",
-                'label_values(srt_job_ok{board="$board", flavor="$flavor"}, test)',
+                'label_values(srt_latency_us{board="$board", flavor="$flavor"}, '
+                "test)",
                 False,
                 False,
             ),
