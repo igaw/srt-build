@@ -75,6 +75,12 @@ right after boot, before the wait; its output lands in the job log:
     srt-build jobs hack 67 --minutes 10 --file trace-run.sh \
         --run "./trace-run.sh sv svsematest -q -t -a -p 98 -D 1m -b 1000"
 
+## Board tuning
+
+[doc/TUNING.md](doc/TUNING.md) explains the boards' kernel configuration,
+command line and runtime settings, the quirks found on the way and what
+didn't help, with the LAVA jobs that showed it.
+
 ## Checking kernel configs
 
     srt-build config c2d --check          # in the kernel tree
