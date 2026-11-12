@@ -140,8 +140,9 @@ def test_steps_are_no_console_findings(monkeypatch, flavor):
     ],
 )
 def test_fair_server_off(monkeypatch, flavor, kernel, off):
-    """The rt flavor switches 6.12's fair server off before testing; its
-    rt-isolcpus jobs and newer kernels keep it (config.yml flavors)."""
+    """rt's rtla-osnoise switches 6.12's fair server off before testing;
+    the other tests, rt-isolcpus and newer kernels keep it (config.yml
+    flavors)."""
     monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
     board = "rpi3-64"
     ctx = SimpleNamespace(
@@ -150,6 +151,7 @@ def test_fair_server_off(monkeypatch, flavor, kernel, off):
     job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
     job_ctx["tags"] = [board]
     flavor_job_ctx(ctx, flavor, job_ctx)
+    switched = 0
     for path in _templates(flavor):
         job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
         names = [
@@ -157,9 +159,10 @@ def test_fair_server_off(monkeypatch, flavor, kernel, off):
             for a in job["actions"]
             for d in (a.get("test") or {}).get("definitions") or []
         ]
-        # pi-stress needs it: its busy loops starve everything else.
-        expected = off and "pi-stress" not in path
+        expected = off and job["job_name"].split()[0] == "rtla-osnoise"
         assert ("fair-server" in names) == expected, f"{path}: {names}"
         if expected:
             # Before the test it is for.
             assert names.index("fair-server") == 0, names
+            switched += 1
+    assert switched == (1 if off else 0)

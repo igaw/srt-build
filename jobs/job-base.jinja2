@@ -56,10 +56,10 @@ actions:
       prompts:
         - 'lava:'
   
-{% if fair_server_off %}
-{#- config.yml flavors: fair_server_off. The fair server's runtime per
-    CPU, 0 switches it off; the check fails the job if it is still on
-    anywhere (or the knob is missing). #}
+{% if job_name.split(' ')[0] in fair_server_off_tests | default([]) %}
+{#- config.yml flavors: fair_server_off, for this test. The fair
+    server's runtime per CPU, 0 switches it off; the check fails the
+    job if it is still on anywhere (or the knob is missing). #}
   - test:
       timeout:
         minutes: 1

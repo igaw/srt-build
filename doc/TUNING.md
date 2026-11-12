@@ -112,27 +112,35 @@ didn't stick.
 
 ## Runtime settings in the jobs
 
-- **Fair server off for rt on 6.12** (`flavors: rt: fair_server_off`).
-  6.12's fair server (`dl_server`, 50 ms per 1 s for normal tasks)
-  runs normal tasks ahead of RT tasks when it considers them starved.
-  Its 1 s period and the tests' cycles line up differently in each
-  run, so some runs are hit and others not: round 8 rtla-osnoise on
-  the Pis had hackbench run 1.2-2.4 ms ahead of the FIFO osnoise
-  thread in some jobs and in none of others (reruns 554-559). Trace
-  (hack job 562, rpi3-32): `osnoise/2` switched out while runnable for
-  hackbench right after `dl_server_start`, back at `dl_server_stop`.
-  rpi3-64 (hack job 561): with the fair server 1 of 4 runs hit 4 ms,
-  without it none of 4. The jobs set every CPU's
-  `/sys/kernel/debug/sched/fair_server/cpu*/runtime` to 0 and check it;
-  the kernel then logs "Fair server disabled in CPU N, system may crash
-  due to starvation", which is expected. rt-isolcpus keeps the fair
-  server, so its behaviour is still tested. **pi-stress keeps it
-  too**: its threads busy-loop on every CPU, and without the fair
-  server normal tasks get no CPU at all; a hackbench task preempted in
-  an RCU read-side section stalled RCU and the test shell timed out
-  (round 9: c2d 583, rpi3-32 604). Newer kernels have fixes
-  for it (mainline e636ffb9e31b4, f5a538c07df26 and others, not in
-  6.12) and get their own decision.
+- **Fair server off for rt rtla-osnoise on 6.12** (`flavors: rt:
+  fair_server_off`, per kernel release and test). 6.12's fair server
+  (`dl_server`, 50 ms per 1 s for normal tasks) runs normal tasks
+  ahead of RT tasks when it considers them starved. Its 1 s period and
+  osnoise's 1 s cycle line up differently in each run, so some runs
+  are hit and others not: round 8 rtla-osnoise on the Pis had
+  hackbench run 1.2-2.4 ms ahead of the FIFO osnoise thread in some
+  jobs and in none of others (reruns 554-559). Trace (hack job 562,
+  rpi3-32): `osnoise/2` switched out while runnable for hackbench right
+  after `dl_server_start`, back at `dl_server_stop`. rpi3-64 (hack job
+  561): with the fair server 1 of 4 runs hit 4 ms, without it none of
+  4. The job sets every CPU's
+  `/sys/kernel/debug/sched/fair_server/cpu*/runtime` to 0 and checks
+  it; the kernel then logs "Fair server disabled in CPU N, system may
+  crash due to starvation", which is expected.
+
+  Only osnoise keeps its RT thread busy long enough (80 % of each
+  second) for normal tasks on the same CPU to starve; the other tests'
+  RT threads mostly sleep, so the fair server keeps waiting. Round 9
+  had it off for every rt test: osnoise on the Pis dropped back to
+  238-276 us (round 8: 1250 and 6882 us), all other tests measured the
+  same as with it (within the noise band below). So everything else
+  tests the kernel as it is, rt-isolcpus included. Switching it off
+  for all tests also broke pi-stress: its threads busy-loop on every
+  CPU, without the fair server normal tasks got no CPU at all, a
+  hackbench task preempted in an RCU read-side section stalled RCU and
+  the test shell timed out (round 9: all four boards, e.g. c2d 583).
+  Newer kernels have fixes for the fair server (mainline e636ffb9e31b4,
+  f5a538c07df26 and others, not in 6.12) and get their own decision.
 - **rtla osnoise** (test-definitions `rtla-osnoise.sh`): runtime
   800 ms per 1 s period (`-r 800000`): with the default 900 ms the
   osnoise threads plus the threaded IRQs exceeded the RT runtime limit

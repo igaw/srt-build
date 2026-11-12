@@ -36,8 +36,8 @@ kernel_config:
 #     {housekeeping} are the board's isolcpus and housekeeping_cpus.
 #     Left out on boards without isolcpus.
 #   needs_isolcpus: skip the flavor on boards without isolcpus
-#   fair_server_off: kernel releases (git describe prefixes) on which
-#     the jobs switch the fair server off before testing
+#   fair_server_off: {kernel release (git describe prefix): [tests]}:
+#     those tests' jobs switch the fair server off before testing
 # A board's kernel_args: {flavor: args} adds board specific arguments.
 flavors:
   # 6.12's fair server (dl_server) runs normal tasks ahead of RT tasks
@@ -46,13 +46,17 @@ flavors:
   # rtla-osnoise on the Pis saw hackbench run 0.2-2.4 ms ahead of the
   # FIFO osnoise thread in some jobs and not at all in others (round 8,
   # traced in hack job 562). On rpi3-64 (hack job 561) 1 of 4 runs with
-  # it hit 4 ms, none of 4 without. That is no baseline. Off for rt on
-  # 6.12; rt-isolcpus keeps it, so it is still tested. Switching it off
-  # logs "Fair server disabled in CPU N, system may crash due to
-  # starvation": expected. pi-stress keeps it (its template): its
-  # busy loops would starve everything else.
+  # it hit 4 ms, none of 4 without. That is no baseline. Only osnoise
+  # keeps its RT thread busy long enough (80 %) to starve normal tasks;
+  # the other tests' RT threads mostly sleep, and they measured the same
+  # with and without it (rounds 8 and 9). So off only for rt
+  # rtla-osnoise on 6.12; everything else, rt-isolcpus included, tests
+  # the kernel as it is (pi-stress even needs it, round 9). Switching
+  # it off logs "Fair server disabled in CPU N, system may crash due to
+  # starvation": expected.
   rt:
-    fair_server_off: ["v6.12."]
+    fair_server_off:
+      "v6.12.": [rtla-osnoise]
   # rt tuned for isolated CPUs: the rt kernel, CPU 0 for housekeeping,
   # the others without tick, RCU callbacks, unmanaged IRQs and other
   # tasks. Without "domain" the scheduler still puts normal tasks
