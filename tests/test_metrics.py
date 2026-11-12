@@ -176,3 +176,57 @@ def test_exportable():
     assert not exportable(_job(description="pi-stress (rcutree.kthread_prio=5)"))
     assert not exportable(_job(description="test-x86-health-check"))
     assert not exportable(_job(description="cyclictest", health_check=True))
+
+
+def test_combined_job_samples_per_test():
+    """A combined job's results get the test of their suite, as if each
+    test had its own job; kernel-log and other helper suites none."""
+    from srt_build.report import summarize_job
+
+    suites = [
+        {"id": 1, "name": "lava"},
+        {"id": 2, "name": "0_settle"},
+        {"id": 3, "name": "1_rtla-timerlat"},
+        {"id": 4, "name": "2_kernel-log"},
+        {"id": 5, "name": "3_cyclictest"},
+    ]
+    upload = "reference: http://a.lan/artifacts/x/rtla-timerlat.json\n"
+    tests = [
+        {"name": "u0-max-latency", "result": "pass", "suite": 3, "measurement": "256"},
+        {"name": "t0-max-latency", "result": "pass", "suite": 5, "measurement": "155"},
+        {"name": "kernel-log-clean", "result": "pass", "suite": 4, "measurement": "1"},
+        {"name": "test-attachment", "result": "pass", "suite": 3, "metadata": upload},
+    ]
+    job = _job(description="combined rt")
+    s = summarize_job(job, tests, suites)
+    assert s.per_test == [("rtla-timerlat", 256.0), ("cyclictest", 155.0)]
+    doc = {"thread": {"0": {"histogram": {"10": 5}, "count": 5}}}
+    samples = job_samples(job, tests, s, {"rtla-timerlat.json": doc})
+    lat = {
+        (x["metric"]["test"], x["metric"]["thread"]): x["values"][0]
+        for x in samples
+        if x["metric"]["__name__"] == "srt_latency_us"
+    }
+    assert lat == {("rtla-timerlat", "u0"): 256.0, ("cyclictest", "t0"): 155.0}
+    assert not [x for x in samples if x["metric"].get("case") == "kernel-log-clean"]
+    hist = {
+        x["metric"]["test"]
+        for x in samples
+        if x["metric"]["__name__"] == "srt_latency_bucket"
+    }
+    assert hist == {"rtla-timerlat"}
+
+
+def test_single_test_job_keeps_its_test():
+    from srt_build.report import combined_suite_tests
+
+    assert (
+        combined_suite_tests(
+            [
+                {"id": 1, "name": "lava"},
+                {"id": 2, "name": "0_cyclictest"},
+                {"id": 3, "name": "1_kernel-log"},
+            ]
+        )
+        == {}
+    )

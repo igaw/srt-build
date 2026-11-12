@@ -220,3 +220,20 @@ def test_latency_above_alarm_is_a_problem():
     ]
     s = summarize_job(job(), tests, SUITES, log(target("login:")))
     assert s.problems() == ["max latency 15838932 us > 1000"]
+
+
+def test_combined_job_has_a_row_per_test():
+    suites = [
+        {"id": 1, "name": "lava"},
+        {"id": 3, "name": "0_rtla-timerlat"},
+        {"id": 4, "name": "1_kernel-log"},
+        {"id": 5, "name": "2_cyclictest"},
+    ]
+    tests = [
+        case("u0-max-latency", suite=3, measurement="256", unit="us"),
+        case("t0-max-latency", suite=5, measurement="155", unit="us"),
+    ]
+    s = summarize_job(job(), tests, suites)
+    text = format_report([s])
+    assert "  rtla-timerlat" in text and "  cyclictest" in text
+    assert s.max_latency == 256.0

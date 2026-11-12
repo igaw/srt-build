@@ -131,21 +131,33 @@ def job_samples(job, tests, summary, artifacts=None):
     srt_build = str(job_metadata(job).get("srt.build") or "unknown")
     out.append(_sample("srt_job_info", {**labels, "srt_build": srt_build}, 1, ts))
 
+    # A combined job's results belong to the test of their suite, so
+    # each test keeps its own series, as with a job per test.
+    suite_tests = getattr(summary, "suite_tests", None) or {}
+
+    def test_labels(suite):
+        name = suite_tests.get(suite)
+        return {**labels, "test": name} if name else labels
+
     for t in tests:
         name = t.get("name", "")
         value = t.get("measurement")
         if value in (None, "") or _LAVA_CASES.match(name):
             continue
+        if suite_tests and t.get("suite") not in suite_tests:
+            continue  # kernel-log, fair-server, ... of a combined job
+        tl = test_labels(t.get("suite"))
         m = _LATENCY.match(name)
         if m:
             extra = {"thread": m.group(1), "stat": m.group(2)}
-            out.append(_sample("srt_latency_us", {**labels, **extra}, float(value), ts))
+            out.append(_sample("srt_latency_us", {**tl, **extra}, float(value), ts))
         else:
             extra = {"case": name, "unit": t.get("unit") or ""}
-            out.append(_sample("srt_value", {**labels, **extra}, float(value), ts))
+            out.append(_sample("srt_value", {**tl, **extra}, float(value), ts))
 
-    for doc in (artifacts or {}).values():
-        out += histogram_samples(doc, labels, ts)
+    suites = artifact_suites(tests)
+    for fname, doc in (artifacts or {}).items():
+        out += histogram_samples(doc, test_labels(suites.get(fname)), ts)
     return out
 
 
@@ -183,6 +195,13 @@ def histogram_samples(doc, labels, ts):
                 )
             )
     return out
+
+
+def artifact_suites(tests):
+    """{file name: suite id} of the JSON files a job uploaded."""
+    return {
+        name: t.get("suite") for t in tests for name, _ in artifact_urls([t]).items()
+    }
 
 
 def artifact_urls(tests):

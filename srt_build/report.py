@@ -138,6 +138,10 @@ class JobSummary:
     error: str = ""
     findings: list = field(default_factory=list)
     retried: list = field(default_factory=list)
+    # Combined jobs (several tests in one boot): {suite id: test} of
+    # the measuring suites and [(test, max latency)] in run order.
+    suite_tests: dict = field(default_factory=dict)
+    per_test: list = field(default_factory=list)
 
     @property
     def finished(self):
@@ -223,12 +227,41 @@ def summarize_job(job, tests, suites=None, log_text=None):
 
     if suites is not None:
         s.no_results = _definitions_without_results(tests, suites)
+        s.suite_tests = combined_suite_tests(suites)
+        for sid, name in s.suite_tests.items():
+            lat = [float(t["measurement"]) for t in latencies if t["suite"] == sid]
+            s.per_test.append((name, max(lat) if lat else None))
 
     if log_text:
         lines = console_lines(parse_log(log_text))
         s.kernel = kernel_version(lines)
         s.findings = scan_console(lines)
     return s
+
+
+# Suites of a combined job that run no test of their own.
+_HELPER_SUITES = {"lava", "kernel-log", "fair-server", "fair-server-on", "settle"}
+
+
+def combined_suite_tests(suites):
+    """{suite id: test name} of a combined job's tests, in run order.
+
+    LAVA names a job's suites "<n>_<definition name>". A job with more
+    than one measuring suite is a combined job (combined.py); for a job
+    with one test this is {}, and the job's own test name applies.
+    """
+    found = []
+    for su in suites or []:
+        m = _DEFINITION_CASE.match(su.get("name") or "")
+        if not m:
+            continue
+        name = su["name"].split("_", 1)[1]
+        if name in _HELPER_SUITES:
+            continue
+        found.append((int(su["name"].split("_", 1)[0]), su["id"], name))
+    if len(found) < 2:
+        return {}
+    return {sid: name for _, sid, name in sorted(found)}
 
 
 def _definitions_without_results(tests, suites):
@@ -270,9 +303,8 @@ def _fmt_uploads(s):
     return f"{s.uploads} ok"
 
 
-def format_report(summaries):
-    """The report as text: one row per job, then findings and a summary."""
-    headers = ["job", "device", "test", "health", "max us", "uploads", "problems"]
+def _report_rows(summaries):
+    """One row per job; a combined job adds an indented row per test."""
     rows = []
     for s in summaries:
         health = s.health if s.finished else s.state
@@ -290,6 +322,17 @@ def format_report(summaries):
                 ),
             ]
         )
+        for name, lat in s.per_test:
+            rows.append(
+                ["", "", "  " + name, "", "-" if lat is None else f"{lat:.0f}", "", ""]
+            )
+    return rows
+
+
+def format_report(summaries):
+    """The report as text: one row per job, then findings and a summary."""
+    headers = ["job", "device", "test", "health", "max us", "uploads", "problems"]
+    rows = _report_rows(summaries)
     widths = [len(h) for h in headers]
     for r in rows:
         for i, cell in enumerate(r[:-1]):
