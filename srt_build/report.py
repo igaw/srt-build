@@ -52,6 +52,12 @@ _NORMALIZE = re.compile(r"CPU: \d+ PID: \d+ ")
 _KERNEL_VERSION = re.compile(r"Linux version (\S+)")
 # The lava suite has one case per test definition run: "<n>_<name>".
 _DEFINITION_CASE = re.compile(r"^\d+_\S+$")
+# A max latency above this is never normal on any board (round 10's
+# worst was bbb rtla-osnoise, 536 us) and needs a look, even in a
+# Complete job: the stress-ng pilot (jobs 716-727) completed with
+# 3.8 ms, 48 ms and 15 s. Not a regression check, which needs the
+# per-board band, only a floor under it.
+LATENCY_ALARM_US = 1000
 # LAVA's boot actions (u-boot, iPXE), the ones failure_retry repeats.
 _BOOT_ACTION = re.compile(
     r"^(bootloader-\S+|uboot-\S+|u-boot-\S+|ipxe-\S+|pdu-reboot|reset-device"
@@ -150,6 +156,12 @@ class JobSummary:
             out.append("no results: " + ", ".join(self.no_results))
         if self.findings:
             out.append(f"{len(self.findings)} console findings")
+        if (
+            self.max_latency is not None
+            and self.latency_unit in ("", "us")
+            and self.max_latency > LATENCY_ALARM_US
+        ):
+            out.append(f"max latency {self.max_latency:.0f} us > {LATENCY_ALARM_US}")
         return out
 
     def to_dict(self):

@@ -209,3 +209,14 @@ def test_known_kernel_warning_is_no_finding():
     assert scan_console(lines) == [
         ("kernel", "rcu: INFO: rcu_preempt self-detected stall on CPU")
     ]
+
+
+def test_latency_above_alarm_is_a_problem():
+    """The stress-ng pilot's scheduler jobs completed with 15 s (job 725)."""
+    tests = [
+        case("0_rtla-osnoise", suite=LAVA),
+        case("t0-max-latency", measurement="15838932.0", unit="us"),
+        case("test-attachment"),
+    ]
+    s = summarize_job(job(), tests, SUITES, log(target("login:")))
+    assert s.problems() == ["max latency 15838932 us > 1000"]
