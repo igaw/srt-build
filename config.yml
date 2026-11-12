@@ -49,7 +49,8 @@ flavors:
   # it hit 4 ms, none of 4 without. That is no baseline. Off for rt on
   # 6.12; rt-isolcpus keeps it, so it is still tested. Switching it off
   # logs "Fair server disabled in CPU N, system may crash due to
-  # starvation": expected.
+  # starvation": expected. pi-stress keeps it (its template): its
+  # busy loops would starve everything else.
   rt:
     fair_server_off: ["v6.12."]
   # rt tuned for isolated CPUs: the rt kernel, CPU 0 for housekeeping,

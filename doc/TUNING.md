@@ -126,7 +126,11 @@ didn't stick.
   `/sys/kernel/debug/sched/fair_server/cpu*/runtime` to 0 and check it;
   the kernel then logs "Fair server disabled in CPU N, system may crash
   due to starvation", which is expected. rt-isolcpus keeps the fair
-  server, so its behaviour is still tested. Newer kernels have fixes
+  server, so its behaviour is still tested. **pi-stress keeps it
+  too**: its threads busy-loop on every CPU, and without the fair
+  server normal tasks get no CPU at all; a hackbench task preempted in
+  an RCU read-side section stalled RCU and the test shell timed out
+  (round 9: c2d 583, rpi3-32 604). Newer kernels have fixes
   for it (mainline e636ffb9e31b4, f5a538c07df26 and others, not in
   6.12) and get their own decision.
 - **rtla osnoise** (test-definitions `rtla-osnoise.sh`): runtime

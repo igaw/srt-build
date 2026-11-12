@@ -6,6 +6,11 @@
     FIFO 1 and starve for the whole run (RCU stall, see
     Documentation/RCU/stallwarn.rst). Put them above pi_stress. #}
 {% set kernel_args = ((kernel_args ~ ' ') if kernel_args else '') ~ 'rcutree.kthread_prio=5' %}
+{#- Its busy-looping threads leave normal tasks (hackbench, the test
+    shell) only what the fair server guarantees them: without it they
+    starve, an RCU reader among them stalls RCU and the test shell
+    times out (round 9: c2d 583, rpi3-32 604). Keep the fair server. #}
+{% set fair_server_off = false %}
 
 {% block tests %}
 timeout:

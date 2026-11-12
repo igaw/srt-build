@@ -157,7 +157,9 @@ def test_fair_server_off(monkeypatch, flavor, kernel, off):
             for a in job["actions"]
             for d in (a.get("test") or {}).get("definitions") or []
         ]
-        assert ("fair-server" in names) == off, f"{path}: {names}"
-        if off:
+        # pi-stress needs it: its busy loops starve everything else.
+        expected = off and "pi-stress" not in path
+        assert ("fair-server" in names) == expected, f"{path}: {names}"
+        if expected:
             # Before the test it is for.
             assert names.index("fair-server") == 0, names
