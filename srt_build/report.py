@@ -52,6 +52,11 @@ _NORMALIZE = re.compile(r"CPU: \d+ PID: \d+ ")
 _KERNEL_VERSION = re.compile(r"Linux version (\S+)")
 # The lava suite has one case per test definition run: "<n>_<name>".
 _DEFINITION_CASE = re.compile(r"^\d+_\S+$")
+# LAVA's boot actions (u-boot, iPXE), the ones failure_retry repeats.
+_BOOT_ACTION = re.compile(
+    r"^(bootloader-\S+|uboot-\S+|u-boot-\S+|ipxe-\S+|pdu-reboot|reset-device"
+    r"|auto-login-action|login-action)$"
+)
 
 
 def parse_log(text):
@@ -176,14 +181,18 @@ def summarize_job(job, tests, suites=None, log_text=None):
         health=job.get("health", ""),
     )
 
-    # An action with failure_retry (bbb's boot) that failed and then
-    # passed has a fail and a pass case of the same name: retried, not
-    # failed.
+    # bbb boots with failure_retry: a failed attempt leaves its failed
+    # boot actions (bootloader-commands, uboot-commands, ...) behind, the
+    # attempt that worked adds no case for them (job 573). A failed boot
+    # action in a job that still completed is such a retry, not a
+    # failure: a boot that failed for good makes the job Incomplete.
     failed = {t["name"] for t in tests if t["result"] == "fail"}
-    passed = {t["name"] for t in tests if t["result"] == "pass"}
     failed -= {"test-attachment", "job"}
-    s.retried = sorted(failed & passed)
-    s.failed = sorted(failed - passed)
+    retried = set()
+    if s.health == "Complete":
+        retried = {n for n in failed if _BOOT_ACTION.match(n)}
+    s.retried = sorted(retried)
+    s.failed = sorted(failed - retried)
     uploads = [t for t in tests if t["name"] == "test-attachment"]
     s.uploads = len(uploads)
     s.uploads_failed = sum(t["result"] == "fail" for t in uploads)

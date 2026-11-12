@@ -138,19 +138,36 @@ def test_failed_case_and_incomplete_job():
 
 def test_retried_boot_is_no_problem():
     """bbb boots with failure_retry (U-Boot sometimes misses the PHY):
-    the failed attempt's cases stay, next to the passing ones."""
+    the failed attempt's boot actions stay failed, the attempt that
+    worked adds no case for them (job 573)."""
     tests = [
-        case("uboot-action", "fail", suite=LAVA),
+        case("bootloader-overlay", suite=LAVA),
+        case("pdu-reboot", suite=LAVA),
         case("bootloader-commands", "fail", suite=LAVA),
-        case("uboot-action", suite=LAVA),
-        case("bootloader-commands", suite=LAVA),
+        case("uboot-commands", "fail", suite=LAVA),
+        case("bootloader-overlay", suite=LAVA),
+        case("pdu-reboot", suite=LAVA),
+        case("login-action", suite=LAVA),
         case("t0-max-latency", measurement="99", unit="us"),
     ]
     s = summarize_job(job(), tests)
     assert s.failed == []
-    assert s.retried == ["bootloader-commands", "uboot-action"]
+    assert s.retried == ["bootloader-commands", "uboot-commands"]
     assert s.problems() == []
-    assert "retried: bootloader-commands, uboot-action" in format_report([s])
+    assert "retried: bootloader-commands, uboot-commands" in format_report([s])
+
+
+def test_failed_boot_is_a_problem():
+    """The same failed boot actions in an Incomplete job: no retry
+    helped (job 474)."""
+    tests = [
+        case("bootloader-commands", "fail", suite=LAVA),
+        case("uboot-action", "fail", suite=LAVA),
+        case("uboot-commands", "fail", suite=LAVA),
+    ]
+    s = summarize_job(job(health="Incomplete"), tests)
+    assert s.retried == []
+    assert s.failed == ["bootloader-commands", "uboot-action", "uboot-commands"]
 
 
 def test_unfinished_job_is_no_problem():
