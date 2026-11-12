@@ -299,6 +299,15 @@ def flavor_kernel_args(ctx, fl):
     return " ".join(args)
 
 
+def fair_server_off(fl, kernel_describe):
+    """Whether flavor fl's jobs switch the fair server off on this
+    kernel (config.yml flavors: fair_server_off, git describe prefixes)."""
+    from . import config
+
+    releases = (config.flavors.get(fl) or {}).get("fair_server_off") or []
+    return any(kernel_describe.startswith(r) for r in releases)
+
+
 def get_flavors(ctx, builds_only=False):
     """Get list of kernel flavors to build or test.
 
@@ -354,6 +363,7 @@ def flavor_job_ctx(ctx, fl, job_ctx):
     # Never empty: grep -vE "" would drop every line.
     job_ctx["kernel_log_known"] = "|".join(KNOWN_KERNEL_WARNINGS) or "^$"
     job_ctx["kernel_args"] = flavor_kernel_args(ctx, fl)
+    job_ctx["fair_server_off"] = fair_server_off(fl, job_ctx["kernel_describe"])
     isolcpus = getattr(ctx, "isolcpus", None)
     job_ctx["isolcpus"] = isolcpus or ""
     job_ctx["housekeeping_cpus"] = getattr(ctx, "housekeeping_cpus", None) or "0"

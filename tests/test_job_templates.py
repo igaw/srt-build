@@ -129,3 +129,35 @@ def test_steps_are_no_console_findings(monkeypatch, flavor):
                 if isinstance(repo, dict):
                     steps = ["+ " + s for s in repo.get("run", {}).get("steps", [])]
                     assert scan_console(steps) == [], f"{path}: {steps}"
+
+
+@pytest.mark.parametrize(
+    "flavor, kernel, off",
+    [
+        ("rt", "v6.12.117-rt23", True),
+        ("rt", "v6.18.2-rt3", False),
+        ("rt-isolcpus", "v6.12.117-rt23", False),
+    ],
+)
+def test_fair_server_off(monkeypatch, flavor, kernel, off):
+    """The rt flavor switches 6.12's fair server off before testing; its
+    rt-isolcpus jobs and newer kernels keep it (config.yml flavors)."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "rpi3-64"
+    ctx = SimpleNamespace(
+        **{"hostname": board, "kernel_describe": kernel, **CFG["machine_config"][board]}
+    )
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, flavor, job_ctx)
+    for path in _templates(flavor):
+        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+        names = [
+            d.get("name")
+            for a in job["actions"]
+            for d in (a.get("test") or {}).get("definitions") or []
+        ]
+        assert ("fair-server" in names) == off, f"{path}: {names}"
+        if off:
+            # Before the test it is for.
+            assert names.index("fair-server") == 0, names

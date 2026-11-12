@@ -56,6 +56,29 @@ actions:
       prompts:
         - 'lava:'
   
+{% if fair_server_off %}
+{#- config.yml flavors: fair_server_off. The fair server's runtime per
+    CPU, 0 switches it off; the check fails the job if it is still on
+    anywhere (or the knob is missing). #}
+  - test:
+      timeout:
+        minutes: 1
+      definitions:
+      - from: inline
+        name: fair-server
+        path: inline/fair-server.yaml
+        repository:
+          metadata:
+            format: Lava-Test Test Definition 1.0
+            name: fair-server
+            description: "switch the fair server off"
+          run:
+            steps:
+            - 'mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug'
+            - 'for f in /sys/kernel/debug/sched/fair_server/cpu*/runtime; do echo 0 > "$f"; done'
+            - lava-test-case fair-server-off --shell 'ls /sys/kernel/debug/sched/fair_server/cpu*/runtime >/dev/null && ! grep -qv "^0$" /sys/kernel/debug/sched/fair_server/cpu*/runtime'
+
+{% endif %}
   - test:
 {{ self.tests() | default('  definitions: []') | indent(6, true) }}
 
