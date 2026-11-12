@@ -2,6 +2,22 @@
 
 tooling to build RT test kernels with Lava.
 
+## Running a test round
+
+    srt-build lava bbb                    # build, install, submit all flavors
+    srt-build lava bbb --skip-build       # the installed kernels
+    srt-build lava bbb --split            # one job (boot) per test
+    srt-build lava bbb --testsuites stress-ng-class   # the stress round
+
+A flavor with a `combined` list in `config.yml` (rt, rt-isolcpus) runs
+those tests in one job, one boot, in that order; its other tests
+(pi-stress) and all other flavors get a job per test. Each test of a
+combined job stays a LAVA test suite of its own, so `jobs report`
+lists it in a row under the job and `jobs export` sends its results
+as that test's, as if it had its own job. `--split`, `--tests` and
+other test suites give one job per test, for chasing a strange
+result.
+
 ## Checking a test round
 
     srt-build jobs watch --since 12       # follow all LAVA jobs after job 12
@@ -18,7 +34,8 @@ reports it Incomplete, but also when it is Complete and still broken:
   crashed after the measurement),
 - the board's console shows a kernel warning, BUG, Oops, panic, RCU
   stall or hung task, or a test-script error (Python traceback, curl
-  error, `command not found`).
+  error, `command not found`),
+- a max latency above 1 ms.
 
 A boot that LAVA had to retry (bbb, see doc/TUNING.md) is shown as
 "retried", not as a problem.

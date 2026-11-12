@@ -30,6 +30,8 @@ Numbers in parentheses like (job 474) are LAVA jobs of our lab; a
 | Kernel log check after each test | `jobs/job-base.jinja2` | LAVA only looks for splats during boot |
 | stress-ng: some stressors excluded, `--oom-avoid` | `jobs/rt/stress-ng-class/` | They outrank the measurement or flood the log |
 | Report: max latency above 1 ms is a problem | `srt_build/report.py` | A Complete job can still have measured 15 s |
+| One boot per flavor, fixed test order | `config.yml` `flavors: combined` | More test time per round, same conditions for every test |
+| rtla timerlat: user-space threads, FIFO 98 | test-definitions `rtla-timerlat.sh`, `PRIORITY` in the jobs | Comparable to cyclictest |
 
 ## The boards
 
@@ -208,6 +210,55 @@ the osnoise thread, and osnoise reported that pause as 20-48 ms of
 noise (rounds 1-2, rpi3-32). rtla itself runs on the housekeeping CPUs:
 it is a normal task, and on a measured CPU its own work showed up as
 up to 2.4 ms of noise (rpi3-64 job 68).
+
+## The test round
+
+A round runs each flavor's tests in **one boot**, one after the other,
+in a fixed order (`config.yml`, `flavors: <flavor>: combined`). For rt:
+
+| # | Test | Duration | Load |
+|---|---|---|---|
+| 0 | settle | 30 s | none: the end of the boot is no load to measure under |
+| 1 | rtla-timerlat | 5 min | hackbench |
+| 2 | rtla-osnoise | 5 min | hackbench (fair server off before, back on after) |
+| 3-10 | cyclictest, cyclicdeadline, pmqtest, ptsematest, svsematest, sigwaittest, signaltest, rt-migrate-test | 1 min each | hackbench |
+| 11 | rtla-timerlat-stress | 5 min | a fixed stress-ng mix (below) |
+
+rt-isolcpus runs its isolation check, then timerlat and osnoise
+(5 min each) and cyclictest (1 min). pi-stress keeps a boot of its
+own: it needs `rcutree.kthread_prio` on the command line and takes the
+board down when something goes wrong (round 9). The other flavors run
+a smoke test each, one boot as before.
+
+Why: a boot per test spent most of a round booting, and one minute
+catches a test's worst case only by chance (the 30-40 % spread between
+rounds above). A fixed order keeps the conditions the same for every
+test in every round: same uptime, same tests before it. The rtla tools
+come first and run longest because they show *where* latency comes
+from; the rt-tests stayed at one minute, they have rarely shown
+anything the others didn't. A kernel log check follows every test, so
+a splat is pinned to the test that caused it.
+
+For chasing a strange result, `srt-build lava --split` (or `--tests`)
+gives one boot per test again.
+
+**The background load is stopped after each test** (test-definitions
+`sh-test-lib`). It used `ps` to find it, which fails in our rootfs
+(no NUMA in the kernels), and killing the loop left the running
+workload behind. With a boot per test nobody noticed; in one boot it
+would have run under all later tests.
+
+**rtla timerlat measures with user-space threads at SCHED_FIFO 98**
+(`-u`, `-P f:98`). The user-space latency (`u0-max-latency`, rtla's
+"Usr") is the one that compares with cyclictest; the same priority as
+cyclictest keeps the two comparable. timerlat also reports the IRQ and
+kernel thread latencies (`i*`, `t*`) of the same wakeups.
+
+**rtla-timerlat-stress** runs one instance each of stress-ng's cpu,
+vm (10 % of memory), hdd (32 MB, in /tmp), sock, pipe, switch and
+fork stressors, all at normal priority, with `--oom-avoid`. The mix
+is fixed: the point is the same load every round, not coverage; the
+stress round (`--testsuites stress-ng-class`, below) is for coverage.
 
 ## Stress tests (stress-ng)
 
