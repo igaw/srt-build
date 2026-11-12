@@ -166,3 +166,24 @@ def test_fair_server_off(monkeypatch, flavor, kernel, off):
             assert names.index("fair-server") == 0, names
             switched += 1
     assert switched == (1 if off else 0)
+
+
+@pytest.mark.parametrize(
+    "duration,base,want", [(60, 7, 7), (900, 5, 22), (900, 7, 24), (3600, 7, 69)]
+)
+def test_job_timeout_covers_boot_and_test(duration, base, want):
+    """A long test adds to the template's job timeout (boot and checks):
+    job 718 (1 h test, bbb boot retry) ran out of time with duration +
+    5 min."""
+    from srt_build.helpers import _bump_job_timeouts
+
+    job = {
+        "timeouts": {
+            "job": {"minutes": base},
+            "action": {"minutes": 5},
+            "connection": {"minutes": 5},
+        }
+    }
+    _bump_job_timeouts(job, duration)
+    assert job["timeouts"]["job"]["minutes"] == want
+    assert job["timeouts"]["action"]["minutes"] * 60 >= min(duration + 120, 300)

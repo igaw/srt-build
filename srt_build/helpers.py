@@ -210,17 +210,24 @@ def _override_duration_and_timeout(t, duration):
 
 
 def _bump_job_timeouts(job, duration):
-    """Ensure job timeouts are large enough given duration (seconds)."""
+    """Make the job timeouts large enough for a test of duration seconds.
+
+    The template's job timeout covers everything but the measurement:
+    deploy, boot (with bbb's boot retries) and the kernel-log check. A
+    long test adds to it; replacing it with the test time alone left a
+    1 h test 19 s short after a boot retry (job 718).
+    """
     if duration is None:
         return
-    mins = int(duration / 60) + 5
+    # The test action's own timeout is duration + 120 s.
+    test_mins = -(-(int(duration) + 120) // 60)
     try:
-        if int(job["timeouts"]["action"]["minutes"]) * 60 < duration:
-            job["timeouts"]["action"]["minutes"] = mins
-        if int(job["timeouts"]["job"]["minutes"]) * 60 < duration:
-            job["timeouts"]["job"]["minutes"] = mins
-        if int(job["timeouts"]["connection"]["minutes"]) * 60 < duration:
-            job["timeouts"]["connection"]["minutes"] = mins
+        base = int(job["timeouts"]["job"]["minutes"])
+        if base * 60 < duration + 120:
+            job["timeouts"]["job"]["minutes"] = base + test_mins
+        for name in ("action", "connection"):
+            if int(job["timeouts"][name]["minutes"]) * 60 < duration:
+                job["timeouts"][name]["minutes"] = test_mins
     except Exception:
         # be tolerant if structure changes
         pass
