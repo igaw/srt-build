@@ -293,7 +293,9 @@ that stop at a threshold (`rtla osnoise hist -s <us> --trace` with
 `sched_switch`/`sched_wakeup` events and kprobes on the suspect
 functions) caught the fair server in the first five minutes, after
 many plain reruns only showed that something was wrong. `srt-build
-jobs hack` boots a board like a given job and keeps it for SSH. The
+jobs hack` boots a board like a given job and keeps it for SSH;
+`contrib/hack/` has the scripts used (`osnoise-trace.sh`,
+`fair-server-ab.sh`, `cyclictest-trace.sh`). The
 stop threshold depends on the board: 1 ms suits bbb and the Pis, c2d
 needs about 200 us.
 
