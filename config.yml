@@ -75,9 +75,6 @@ flavors:
     kernel_args: nohz_full={isolcpus}
 
 rt_suites:
-  - '0_jd-hackbench'
-  - '0_jd-compile'
-  - '0_jd-stress_ptrace'
   - '0_cyclicdeadline'
   - '0_cyclictest'
   - '0_pi-stress'

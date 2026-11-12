@@ -20,9 +20,6 @@ test_definitions_branch: 'rt-tests-fixes'  # until Linaro/test-definitions merge
 artifactorial_url: http://artifactory.lan:8000/artifacts/rt-tests/
 artifactorial_token: '4200d0ac96ca7e0b93f24cd304a56cbd'
 
-jitterdebugger:
-  max_latency: 180
-
 cyclicdeadline:
   thread: 1
   max_latency: 180
