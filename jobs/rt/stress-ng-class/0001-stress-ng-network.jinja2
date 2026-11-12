@@ -11,7 +11,7 @@ definitions:
   name: rtla-timerlat
   parameters:
     DURATION: "15m"
-    BACKGROUND_CMD: "stress-ng -v --class network --seq 0"
+    BACKGROUND_CMD: "stress-ng -v --oom-avoid --class network --seq 0"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
 {% endblock tests -%}

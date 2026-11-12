@@ -28,6 +28,8 @@ Numbers in parentheses like (job 474) are LAVA jobs of our lab; a
 | osnoise: 800 ms runtime, rtla on CPU 0 | test-definitions `rtla-osnoise.sh` | Avoids measuring RT throttling and rtla itself |
 | bbb: boot retry | `jobs/boards/bbb.yaml` | U-Boot sometimes misses the Ethernet PHY |
 | Kernel log check after each test | `jobs/job-base.jinja2` | LAVA only looks for splats during boot |
+| stress-ng: some stressors excluded, `--oom-avoid` | `jobs/rt/stress-ng-class/` | They outrank the measurement or flood the log |
+| Report: max latency above 1 ms is a problem | `srt_build/report.py` | A Complete job can still have measured 15 s |
 
 ## The boards
 
@@ -207,6 +209,49 @@ noise (rounds 1-2, rpi3-32). rtla itself runs on the housekeeping CPUs:
 it is a normal task, and on a measured CPU its own work showed up as
 up to 2.4 ms of noise (rpi3-64 job 68).
 
+## Stress tests (stress-ng)
+
+Besides the smoke tests, `--testsuites stress-ng-class` runs one job
+per stress-ng class (network, io, os, scheduler, memory, pipe): rtla
+timerlat on every CPU for 15 minutes (os: 1 hour) while `stress-ng
+--class <class> --seq 0` runs each of the class's stressors in turn,
+one instance per CPU. The test definition restarts stress-ng whenever
+it finishes, so the load lasts as long as the measurement.
+`--testsuites stress-ng` has one job per stressor (373); it is for
+narrowing down a class result, not for rounds.
+
+**Some stressors are left out** (`-x` in the os and scheduler jobs).
+The first run (pilot, jobs 716-727, still with cyclictest at FIFO 98)
+measured 15 s in the scheduler class on bbb and c2d, 48 ms (bbb) and
+3.8 ms (c2d) in the os class. Running every stressor of both classes
+on its own next to cyclictest (c2d, hack jobs 728/729,
+`contrib/hack/stress-ng-hunt.sh`) found the cause:
+
+| Stressor | Max us (c2d) | Why it is excluded |
+|---|---|---|
+| softlockup | 15330708 | Spins at FIFO 99 to provoke the soft-lockup detector; starves everything below for its whole 15 s slot |
+| cpu-sched | 9776 | Gives its tasks random RT and deadline policies |
+| hrtimers | 8328 | High-resolution timer flood; worth its own investigation (below) |
+| schedmix | 3418 | Mixes RT and deadline policies |
+| cyclic | 829 | Its own RT measurement loop, at a high FIFO priority |
+| acct, led, procfs, loop | 11-16 | Harmless for latency, but 600-1200 kernel messages each: process accounting, the KVM's USB keyboard LEDs, invalid `/proc/mtrr` writes, loop devices |
+
+A load that runs above the measuring thread's priority measures the
+test, not the kernel. All other stressors of the two classes stayed
+below 600 us on c2d.
+
+**`--oom-avoid`** for every class: without it the memory stressors in
+the os class ran into the OOM killer (bbb job 718, c2d job 724), whose
+task dumps fill the console and the log.
+
+**The console flood itself did not cost latency** on c2d: 1231
+messages from acct in 15 s left cyclictest at 11 us (the RT kernel
+prints from a thread). The stressors are left out for clean logs.
+
+Open: hrtimers (8 ms on c2d from normal-priority tasks) needs a trace
+before it is called a kernel problem, and bbb's 48 ms in the os class
+was not hunted down on bbb itself.
+
 ## Board and lab quirks
 
 **bbb: the Ethernet PHY is sometimes missing after power-on.** U-Boot
@@ -313,6 +358,15 @@ fair server is off, `kernel-log-clean` checks for splats.
 every test fixed osnoise and broke pi-stress. Change the narrowest
 thing that fixes the problem.
 
+**Know what your load does before you trust its numbers.** stress-ng
+is a kernel stress tool, not a latency workload: some of its stressors
+deliberately run at the top RT priority. The scheduler class "measured"
+15 s on two boards; one stressor held the CPUs for its 15 s slot.
+
+**Look at the numbers, not just the job state.** LAVA marked those
+jobs Complete, and so did `jobs report` until it learned to flag any
+max latency above 1 ms.
+
 **Test your checks.** The kernel log check once matched its own
 pattern, echoed to the console, and flagged every job of two rounds;
 a name clash in artifact uploads failed 20 uploads in one round. Both
@@ -329,6 +383,7 @@ looked like lab problems until we looked closer.
 | 8 | Nov 11 | Kernels rebuilt without RT group scheduling: no more RT throttling. osnoise on the Pis jumped to 1.2-6.9 ms: the fair server. |
 | 9 | Nov 12 | Fair server off for every rt test: osnoise fine, pi-stress broke on all boards. First bbb boot retry. |
 | 10 | Nov 12 | Fair server off for rt osnoise only. 75 of 75 jobs clean: the reference above. |
+| stress-ng pilot | Nov 12 | stress-ng classes on bbb and c2d (jobs 716-727): 15 s, 48 ms, 3.8 ms. Hunted down per stressor (hack jobs 728/729); excluded the stressors that outrank the measurement; measurement switched to rtla timerlat. |
 
 ## Tried, didn't help
 
