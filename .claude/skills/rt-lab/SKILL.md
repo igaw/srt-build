@@ -26,14 +26,20 @@ setting or calling something a regression.
    it in the background and report problems, not every job.
 4. Report: `srt-build jobs report --ids <first>-<last> --save <dir>`.
    Problems are: not Complete, failed cases or uploads, definitions
-   without results, kernel splats or script errors on the console.
-   "retried" (bbb boot) is not a problem.
+   without results, kernel splats or script errors on the console, a
+   max latency above 1 ms. "retried" (bbb boot) is not a problem.
 5. Compare with the reference in `doc/TUNING.md` and with the previous
    round on the same kernel. Normal: median change 5-9 %, one test in
    ten up to 30-40 %; small values (c2d) swing more in percent. Only a
    change beyond both about 40 % and 20 us is worth a look.
 6. Export (from the machine whose job database records what was sent):
    `srt-build jobs export --since 0` sends whatever is missing.
+
+Stress rounds: `--testsuites stress-ng-class` (rtla timerlat next to
+each stress-ng class; see "Stress tests" in `doc/TUNING.md` for the
+excluded stressors). A stressor suspected of a result: run its class
+per stressor with `contrib/hack/stress-ng-hunt.sh` in a hack session
+(`FROM=<stressor>` resumes after a session ran out of time).
 
 Don't change lab infrastructure (LAVA, mirrors) while a round runs.
 One test per LAVA job; don't combine jobs.
