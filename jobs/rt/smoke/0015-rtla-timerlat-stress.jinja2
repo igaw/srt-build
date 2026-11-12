@@ -17,6 +17,7 @@ definitions:
   name: rtla-timerlat-stress
   parameters:
     DURATION: "{{ (rtla_timerlat_stress|default({})).duration|default('1m') }}"
+    PRIORITY: "f:98"
     BACKGROUND_CMD: "stress-ng --oom-avoid --temp-path /tmp --cpu 1 --vm 1 --vm-bytes 10% --hdd 1 --hdd-bytes 32M --sock 1 --pipe 1 --switch 1 --fork 1"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"

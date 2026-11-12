@@ -11,6 +11,7 @@ definitions:
   name: rtla-timerlat
   parameters:
     DURATION: "15m"
+    PRIORITY: "f:98"
     BACKGROUND_CMD: "stress-ng -v --oom-avoid --class pipe --seq 0"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"

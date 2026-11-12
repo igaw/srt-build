@@ -11,6 +11,7 @@ definitions:
   name: rtla-timerlat
   parameters:
     DURATION: "1h"
+    PRIORITY: "f:98"
     BACKGROUND_CMD: "stress-ng -v --oom-avoid --class os --seq 0 -t 15 -x bigheap,brk,stack,env,softlockup,cpu-sched,schedmix,cyclic,hrtimers,acct,led,procfs,loop"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
