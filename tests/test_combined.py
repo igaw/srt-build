@@ -46,6 +46,7 @@ def test_tests_in_order_each_checked(monkeypatch, board, flavor):
         d["name"]
         for d in _definitions(job)
         if d["name"] not in ("kernel-log", "fair-server", "fair-server-on")
+        and not d["name"].startswith("kernel-log-")
     ]
     want = []
     for t, _ in tests:
@@ -60,9 +61,23 @@ def test_tests_in_order_each_checked(monkeypatch, board, flavor):
         _definitions({"actions": [a]})[0]["name"] for a in job["actions"] if "test" in a
     ]
     for i, k in enumerate(kinds):
-        if k not in ("kernel-log", "fair-server", "settle", "fair-server-on"):
-            rest = [x for x in kinds[i + 1 :] if x != "fair-server-on"]
-            assert rest and rest[0] == "kernel-log", kinds
+        if k in ("fair-server", "settle", "fair-server-on"):
+            continue
+        if k == "kernel-log" or k.startswith("kernel-log-"):
+            continue
+        rest = [x for x in kinds[i + 1 :] if x != "fair-server-on"]
+        assert rest and rest[0] == f"kernel-log-{k}", kinds
+
+
+@pytest.mark.parametrize("flavor", COMBINED)
+@pytest.mark.parametrize("board", ["bbb", "c2d", "rpi3-32", "rpi3-64"])
+def test_definition_names_unique(monkeypatch, board, flavor):
+    # LAVA rejects a job whose test definitions share a name (job 793)
+    job, _ = _build(monkeypatch, board, flavor)
+    names = [d["name"] for d in _definitions(job)]
+    assert len(names) == len(set(names)), names
+    paths = [d["path"] for d in _definitions(job) if d.get("from") == "inline"]
+    assert len(paths) == len(set(paths)), paths
 
 
 def test_rt_durations_and_timeouts(monkeypatch):

@@ -258,7 +258,7 @@ def combined_suite_tests(suites):
         if not m:
             continue
         name = su["name"].split("_", 1)[1]
-        if name in _HELPER_SUITES:
+        if name in _HELPER_SUITES or name.startswith("kernel-log-"):
             continue
         found.append((int(su["name"].split("_", 1)[0]), su["id"], name))
     if len(found) < 2:

@@ -21,6 +21,9 @@ from .helpers import convert_to_seconds, generate_job
 SETTLE = "settle"
 SETTLE_SECONDS = 30
 
+# Definitions that check or set up around a test, not tests themselves.
+_HELPERS = ("kernel-log", "fair-server", "fair-server-on", SETTLE)
+
 # Timeout slack per test for setup, result parsing and uploads.
 TEST_SLACK = 120
 
@@ -121,6 +124,33 @@ def _main_definition(action):
     return None
 
 
+def _unique_names(actions):
+    """Make the test definitions' names unique, as LAVA requires.
+
+    Each test brings the template's inline checks (kernel-log after
+    every test): a repeated one is renamed after the test it follows,
+    "kernel-log-cyclictest", and so is its LAVA suite.
+    """
+    defs = [d for a in actions if "test" in a for d in a["test"]["definitions"]]
+    count = {}
+    for d in defs:
+        count[d["name"]] = count.get(d["name"], 0) + 1
+    last = None
+    for d in defs:
+        name = d["name"]
+        if name not in _HELPERS:
+            last = name
+            continue
+        if count[name] < 2:
+            continue
+        new = f"{name}-{last}"
+        d["name"] = new
+        d["path"] = f"inline/{new}.yaml"
+        meta = (d.get("repository") or {}).get("metadata")
+        if meta:
+            meta["name"] = new
+
+
 def build(rendered, tests, flavor, duration=None):
     """One job running tests [(name, duration)] of rendered in order.
 
@@ -165,6 +195,7 @@ def build(rendered, tests, flavor, duration=None):
                 actions.append(_fair_server_restore())
                 test_seconds += 60
                 fair_server_off = False
+    _unique_names(actions)
     job["actions"] = actions
     job["job_name"] = f"combined {flavor}"
     job["metadata"]["srt.test"] = "combined"
