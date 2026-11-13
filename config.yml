@@ -103,6 +103,18 @@ flavors:
   nohz:
     kernel_args: nohz_full={isolcpus}
 
+# A round (doc/ROUNDS.md): `srt-build round start` runs one
+# `lava <board> --skip-build` per board and entry of submissions, the
+# entry's keys as lava's options (flavors, testsuites, tests, split).
+# Test rounds (round start --test) are dropped by `round prune` after
+# test-retention-days.
+rounds:
+  boards: [bbb, c2d, rpi3-32, rpi3-64]
+  submissions:
+    - {}
+    - {flavors: [rt], testsuites: stress-ng-class}
+  test-retention-days: 30
+
 rt_suites:
   - '0_cyclicdeadline'
   - '0_cyclictest'

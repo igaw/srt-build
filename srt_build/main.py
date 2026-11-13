@@ -80,6 +80,7 @@ def main():  # noqa: C901 (command dispatch, one branch per command)
         "hack",
         "export",
         "dashboard",
+        "purge",
     ):
         if args.debug:
             logging.basicConfig(level=logging.DEBUG)
