@@ -9,12 +9,17 @@
 #
 # Usage: ./cyclictest-trace.sh [n [thresh_us [duration]]]
 #   CPUS=1-3 HOUSEKEEPING=0 (defaults) select the CPUs
+#   LOAD="stress-ng --mutex 0 -t 60" runs this in a loop (on all CPUs)
+#   instead of hackbench on the housekeeping CPU
+#   OUT=dir puts the results there (default /root)
 #
 # On a board: srt-build jobs hack <cyclictest job> --minutes 60 \
 #     --file contrib/hack/cyclictest-trace.sh \
 #     --run "./cyclictest-trace.sh 10 250"
 # Found the fair server running normal tasks ahead of cyclictest on
-# isolated CPUs without isolcpus=domain (rpi3-64, hack job 241).
+# isolated CPUs without isolcpus=domain (rpi3-64, hack job 241), and
+# with LOAD="stress-ng --mutex 0 -t 120" cyclictest's own main thread
+# run by the fair server ahead of its FIFO 98 threads (jobs 772, 773).
 n=${1:-5}
 th=${2:-250}
 dur=${3:-3m}
@@ -23,7 +28,9 @@ HOUSEKEEPING=${HOUSEKEEPING:-0}
 threads=$(echo "$CPUS" | awk -F, '{ for (i = 1; i <= NF; i++) {
     m = split($i, r, "-"); t += (m > 1) ? r[2] - r[1] + 1 : 1 } } END { print t }')
 T=/sys/kernel/tracing
+OUT=${OUT:-/root}
 cd /root || exit 1
+mkdir -p "$OUT"
 for i in $(seq "$n"); do
     echo 0 > $T/tracing_on
     echo > $T/trace
@@ -40,19 +47,27 @@ for i in $(seq "$n"); do
         echo "$e" >> $T/set_event 2>/dev/null
     done
     echo 1 > $T/tracing_on
-    ( while :; do taskset -c "$HOUSEKEEPING" hackbench >/dev/null 2>&1; sleep 1; done ) &
+    if [ -n "$LOAD" ]; then
+        ( while :; do $LOAD >/dev/null 2>&1; sleep 1; done ) &
+    else
+        ( while :; do taskset -c "$HOUSEKEEPING" hackbench >/dev/null 2>&1; sleep 1; done ) &
+    fi
     bg=$!
+    sleep 3
     cyclictest -q -p 98 -i 1000 -t "$threads" -a "$CPUS" -D "$dur" -m -b "$th" \
-        --tracemark > "hunt-$i.txt" 2>&1
+        --tracemark > "$OUT/hunt-$i.txt" 2>&1
     kill "$bg"
     wait "$bg" 2>/dev/null
-    pkill hackbench
+    # pkill and ps don't work in this rootfs
+    for p in /proc/[0-9]*; do
+        grep -qE '^(hackbench|stress-ng)' "$p/comm" 2>/dev/null && kill -9 "${p#/proc/}" 2>/dev/null
+    done
     sleep 2
     on=$(cat $T/tracing_on)
     echo 0 > $T/tracing_on
-    echo "hunt $i uptime $(cut -d' ' -f1 /proc/uptime): $(grep -o 'Max: *[0-9]*' "hunt-$i.txt" | tr -s ' ' | tr '\n' ' ')"
+    echo "hunt $i uptime $(cut -d' ' -f1 /proc/uptime): $(grep -o 'Max: *[0-9]*' "$OUT/hunt-$i.txt" | tr -s ' ' | tr '\n' ' ')"
     if [ "$on" = 0 ]; then
-        cat $T/trace > "hunt-$i.trace"
-        echo "  stopped above $th us: hunt-$i.trace ($(wc -l < "hunt-$i.trace") lines)"
+        cat $T/trace > "$OUT/hunt-$i.trace"
+        echo "  stopped above $th us: hunt-$i.trace ($(wc -l < "$OUT/hunt-$i.trace") lines)"
     fi
 done
