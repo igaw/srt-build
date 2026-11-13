@@ -42,11 +42,16 @@ easily:
   space before a round and while it runs, and let `jobs report` call
   "No space left on device" an infrastructure failure, not a test one.
 
-Wanted: a round as a first-class thing: `srt-build round start
-[--boards ...] [--suites smoke,stress-ng-class]` that submits
-everything, records the round (number, srt-build and test-definitions
-version, kernel, job ids) and prints it whole; `round status`, `round
-wait` and `round report` that take the round, not job ids.
+## Plan: rounds and the round archive
+
+The fix for all of the above, agreed 2026-11-13: a round becomes the
+unit that is submitted, followed, reported and exported; its results
+go to an archive of plain files that srt-build manages, the master copy
+(LAVA has no backup, VictoriaMetrics is filled from the archive); the
+job database is extended to know rounds; the dashboards put the round
+on the x axis. The design, the steps and what each must show:
+[ROUNDS.md](ROUNDS.md). Step 1 backfills rounds 10-13 before
+Artifactorial drops their uploads (90 days, 2027-02-10).
 
 ## Latency limits learned from history
 
