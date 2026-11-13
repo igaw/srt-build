@@ -14,9 +14,9 @@ from ..helpers import (
     load_job_ctx,
     get_testpath,
     process_test_files,
-    save_job_ids,
     generate_job,
 )
+from ..rounds import add_jobs, begin_test_round, print_round, recording_submit
 from .cmd_config import cmd_config
 from .cmd_build import cmd_build
 from .cmd_install import cmd_install
@@ -237,7 +237,13 @@ def show_generated_jobs(ctx):  # noqa: C901 (one branch per job option)
 
 
 def cmd_lava(ctx, system_config, kernel_config):
-    """Run LAVA tests with kernel builds for different flavors."""
+    """Run LAVA tests with kernel builds for different flavors.
+
+    Returns the ids of the jobs submitted. Without ctx.args.round the
+    command is a test round of its own (rounds.begin_test_round); with
+    one (`round start`), round start records the jobs, and ctx.submit
+    replaces lavacli.
+    """
     # Handle --list-tests flag
     if hasattr(ctx.args, "list_tests") and ctx.args.list_tests:
         list_available_tests(ctx)
@@ -254,7 +260,7 @@ def cmd_lava(ctx, system_config, kernel_config):
         print("Use --list-tests to see available tests")
         return
 
-    ensure_lavacli_available()
+    info, entries, submit = _round(ctx, system_config)
     ctx.args.config = ""
 
     flavors = get_flavors(ctx)
@@ -279,8 +285,49 @@ def cmd_lava(ctx, system_config, kernel_config):
             flavor_job_ctx(ctx, fl, job_ctx)
 
             testpath = get_testpath(ctx, fl)
-            process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl)
+            done = len(jobs)
+            process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl, submit)
+            if info:
+                add_jobs(system_config, info, _ids(jobs[done:]), entries, ctx.hostname)
 
             copytree(td, system_config["jobfiles-path"], dirs_exist_ok=True)
 
-    save_job_ids(ctx, jobs, system_config)
+    if info:
+        print_round(info)
+    return _ids(jobs)
+
+
+def _round(ctx, system_config):
+    """(round.yaml or None, {job id: entry}, submit function).
+
+    A round's submissions (round start) come with a round and a submit
+    function; any other `lava` command is a test round of its own, in
+    the archive before its first job.
+    """
+    if getattr(ctx.args, "round", None) is not None:
+        if not ctx.submit:
+            ensure_lavacli_available()
+        return None, {}, ctx.submit
+    ensure_lavacli_available()
+    info = begin_test_round(system_config, ctx.args.machine, submission(ctx.args))
+    ctx.args.round = info["round"]
+    entries = {}
+    return info, entries, recording_submit(entries)
+
+
+def _ids(jobs):
+    """The job ids lavacli printed (not its errors)."""
+    return [int(j) for j in jobs if str(j).strip().isdigit()]
+
+
+def submission(args):
+    """The command's options, as an entry of round.yaml submissions."""
+    out = {}
+    if args.flavors:
+        out["flavors"] = [f.strip() for f in args.flavors.split(",") if f.strip()]
+    if args.testsuites and args.testsuites != "smoke":
+        out["testsuites"] = args.testsuites
+    for key in ("tests", "duration", "split"):
+        if getattr(args, key, None):
+            out[key] = getattr(args, key)
+    return out

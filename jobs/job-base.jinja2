@@ -19,6 +19,9 @@ metadata:
   srt.test: "{{ job_name.split(' ')[0] }}"
   srt.kernel: "{{ kernel_describe }}"
   srt.build: "{{ srt_build }}"
+{% if round is defined %}
+  srt.round: "{{ round }}"
+{% endif %}
 context:
   extra_kernel_args: systemd.show_status=0 systemd.log_color=0{% if kernel_args %} {{ kernel_args }}{% endif %}
 

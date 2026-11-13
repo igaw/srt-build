@@ -86,11 +86,22 @@ def main():  # noqa: C901 (command dispatch, one branch per command)
             logging.basicConfig(level=logging.DEBUG)
         args.func(args, system_config, machine_config)
         return
-    # So do the round commands.
-    if getattr(args, "round_cmd", None):
+    # So do the round commands, but for round start, which submits
+    # through `lava`'s code.
+    if getattr(args, "round_cmd", None) not in (None, "start"):
         if args.debug:
             logging.basicConfig(level=logging.DEBUG)
         args.func(args, system_config, machine_config)
+        return
+
+    # round start submits like `lava` does: in the kernel tree, with the
+    # event loop.
+    if getattr(args, "round_cmd", None) == "start":
+        check_kernel_source_directory()
+        setup(system_config)
+        if args.debug:
+            logging.getLogger().setLevel(logging.DEBUG)
+        args.func(args, system_config, machine_config, kernel_config)
         return
 
     # Determine if kernel source directory is required for this invocation

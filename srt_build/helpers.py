@@ -10,11 +10,6 @@ import jinja2
 from logging import error
 from .core import run_cmd
 from .report import KNOWN_KERNEL_WARNINGS
-from .database import (
-    save_job_ids_to_db,
-    get_jobs_from_db,
-    get_job_list_from_db,
-)
 
 
 def ensure_lavacli_available():
@@ -421,6 +416,12 @@ def flavor_job_ctx(ctx, fl, job_ctx):
     job_ctx["flavor"] = fl
     job_ctx["kernel_describe"] = getattr(ctx, "kernel_describe", "") or ""
     job_ctx["srt_build"] = srt_build_version()
+    # srt.round in the job's metadata, only for jobs of a round.
+    rnd = getattr(getattr(ctx, "args", None), "round", None)
+    if rnd is not None:
+        job_ctx["round"] = str(rnd)
+    else:
+        job_ctx.pop("round", None)
     # Never empty: grep -vE "" would drop every line.
     job_ctx["kernel_log_known"] = "|".join(KNOWN_KERNEL_WARNINGS) or "^$"
     job_ctx["kernel_args"] = flavor_kernel_args(ctx, fl)
@@ -486,8 +487,15 @@ def combined_tests(ctx, fl):
     return entries(config.flavors.get(fl))
 
 
-def process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl=None):
-    """Process all test template files in testpath."""
+def process_test_files(
+    ctx, td, job_ctx, testpath, duration, jobs, fl=None, submit=None
+):
+    """Process all test template files in testpath.
+
+    submit(path, jobs) submits a job file and appends its id to jobs
+    (default: lavacli); `round start --dry-run` passes one that doesn't.
+    """
+    submit = submit or _submit
     from . import combined
 
     tests = combined_tests(ctx, fl) if fl else []
@@ -498,7 +506,7 @@ def process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl=None):
         filename = f"{td}/test-combined-{fl}-{ctx.hostname}.yaml"
         with open(filename, "w") as f:
             yaml.dump(job, f, default_flow_style=False)
-        _submit(filename, jobs)
+        submit(filename, jobs)
 
     for filename, ctx_ in job_templates(testpath, job_ctx):
         job = generate_job(ctx.job_path, filename, ctx_)
@@ -511,26 +519,23 @@ def process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl=None):
 
         files = generate_split_files(td, job, ctx.hostname, duration)
         for j in files:
-            _submit(j, jobs)
-
-
-def save_job_ids(ctx, jobs, system_config):
-    """Save job IDs to database for later reference."""
-    if jobs == []:
-        print("no jobs")
-        return
-
-    machine = ctx.args.machine
-    save_job_ids_to_db(machine, jobs, system_config)
-    print(f"job id: {jobs[0]}")
+            submit(j, jobs)
 
 
 def get_jobs(machine, job_id, system_config, batch=False):
-    """Get list of job IDs from database."""
-    return get_jobs_from_db(machine, job_id, system_config, batch)
+    """The jobs of machine in the round job_id belongs to (batch), or
+    just job_id."""
+    from .archive import archive_path, board_runs
+
+    if batch:
+        for run in board_runs(archive_path(system_config), machine):
+            if int(job_id) in run:
+                return run
+    return [int(job_id)]
 
 
 def get_job_list(ctx, system_config):
-    """Get all job IDs for a machine from database."""
-    machine = ctx.args.machine
-    return get_job_list_from_db(machine, system_config)
+    """The first job of each round the board ran in, oldest first."""
+    from .archive import archive_path, board_runs
+
+    return [run[0] for run in board_runs(archive_path(system_config), ctx.args.machine)]

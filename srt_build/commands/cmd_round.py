@@ -1,5 +1,7 @@
 """Round commands - a test round as one unit (doc/ROUNDS.md).
 
+  srt-build round start [--test] [--dry-run]  submit a round (kernel tree)
+  srt-build round rerun N JOB               replace a job of it
   srt-build round import 12 --ids 912-965   backfill a round that ran
   srt-build round report [N]                fetch it into the archive, report
   srt-build round export [N] [--dry-run]    send it to VictoriaMetrics
@@ -8,8 +10,9 @@
 
 A round's results are kept in the round archive (system_config
 "round-archive", default ~/.local/share/srt-build/rounds), the master
-copy. N defaults to the round started last; 12 is a release round, t3
-a test round.
+copy and the only record: there is no database. N defaults to the
+round started last; 12 is a release round, t3 a test round (every
+`lava` command makes one).
 """
 
 import os
@@ -33,10 +36,12 @@ def add_parser(subparser):
         cmd_round_drop,
         cmd_round_export,
         cmd_round_report,
+        cmd_round_start,
     )
 
     p = subparser.add_parser("round", help="test rounds and the round archive")
     sub = p.add_subparsers(help="round commands", dest="round_cmd", required=True)
+    cmd_round_start.add_parsers(sub)
     cmd_round_report.add_parsers(sub)
     cmd_round_export.add_parsers(sub)
     cmd_round_drop.add_parsers(sub)

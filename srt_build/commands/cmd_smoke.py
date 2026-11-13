@@ -10,9 +10,8 @@ from ..helpers import (
     load_job_ctx,
     generate_job,
     generate_split_files,
-    save_job_ids,
 )
-from ..core import run_cmd
+from ..rounds import add_jobs, begin_test_round, print_round, recording_submit
 from .cmd_install import cmd_install
 
 
@@ -44,6 +43,11 @@ def cmd_smoke(ctx, system_config):
     duration = convert_to_seconds(ctx.args.duration)
 
     jobs = []
+    # A test round of its own, like every `lava` command.
+    info = begin_test_round(system_config, ctx.args.machine, {"smoke": True})
+    ctx.args.round = info["round"]
+    entries = {}
+    submit = recording_submit(entries)
 
     ctx.args.dest = "lava"
     ctx.args.postfix = ""
@@ -60,7 +64,8 @@ def cmd_smoke(ctx, system_config):
         job = generate_job(ctx.job_path, filename, job_ctx)
         files = generate_split_files(td, job, ctx.hostname, duration)
         for j in files:
-            (_, res) = run_cmd(["lavacli", "jobs", "submit", j])
-            jobs.append(str(res).strip())
+            submit(j, jobs)
 
-    save_job_ids(ctx, jobs, system_config)
+    ids = [int(j) for j in jobs if str(j).strip().isdigit()]
+    add_jobs(system_config, info, ids, entries, ctx.hostname)
+    print_round(info)

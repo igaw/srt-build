@@ -268,3 +268,21 @@ def test_definitions_without_history(monkeypatch, flavor):
                     d.get("repository")
                 ):
                     assert d.get("history") is False, (path, d["name"])
+
+
+@pytest.mark.parametrize("rnd", [None, "13", "t3"])
+def test_round_in_metadata(monkeypatch, rnd):
+    """srt.round only in jobs of a round (`round start`); job-base has
+    it only when the context has one (StrictUndefined)."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "c2d"
+    ctx = SimpleNamespace(
+        **{"hostname": board, **CFG["machine_config"][board]},
+        args=SimpleNamespace(round=rnd),
+    )
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, "rt", job_ctx)
+    for path, tctx in _templates("rt", job_ctx):
+        md = yaml.safe_load(generate_job(JOBS, path, tctx))["metadata"]
+        assert md.get("srt.round") == rnd

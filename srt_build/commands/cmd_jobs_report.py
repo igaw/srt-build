@@ -6,9 +6,11 @@
   srt-build jobs report --ids 13-72     these jobs
   srt-build jobs report --save DIR      also keep logs and results
 
-"Latest run" is the last batch of jobs srt-build submitted for the
-board, from its job database. --since and --ids ask LAVA instead, so
-they also cover jobs submitted from another machine.
+"Latest run" is the round started last in the round archive (every
+`lava` command is a test round, `round start` a release round), reruns
+in place. --since and --ids ask LAVA instead, so they also cover jobs
+submitted from elsewhere. `round report` keeps a round in the archive;
+this is for a quick look.
 
 Exits with 1 if any job has a problem, 0 otherwise.
 """
@@ -18,7 +20,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-from ..database import get_job_list_from_db, get_jobs_from_db
+from ..archive import archive_path, counted_jobs, load_round, newest_round
 from ..lava_api import LavaApi
 from ..report import format_report, parse_id_list, summarize_job
 
@@ -35,7 +37,7 @@ def add_selection_args(p):
         "--since",
         type=int,
         metavar="ID",
-        help="all LAVA jobs after job ID, not srt-build's job database",
+        help="all LAVA jobs after job ID, not the newest round",
     )
     sel.add_argument("--ids", metavar="LIST", help="these LAVA jobs, e.g. 13-72,80")
     p.add_argument(
@@ -80,11 +82,9 @@ def select_jobs(api, args, system_config, machine_config):
         if args.ids:
             ids = parse_id_list(args.ids)
         else:
-            ids = set()
-            for m in hosts.values():
-                runs = get_job_list_from_db(m, system_config)
-                if runs:
-                    ids.update(get_jobs_from_db(m, runs[-1], system_config, True))
+            archive = archive_path(system_config)
+            rid = newest_round(archive)
+            ids = counted_jobs(load_round(archive, rid)) if rid else []
         with ThreadPoolExecutor(8) as pool:
             jobs = list(pool.map(api.job, sorted(ids)))
 
