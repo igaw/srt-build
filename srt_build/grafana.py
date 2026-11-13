@@ -11,25 +11,25 @@ the JSON.
                        look (problems), and two rounds side by side
                        (release or test rounds). A click on a trend
                        opens:
-  rt-test-detail.json  "RT test detail": one board, flavor and test,
-                       over time. Trends per thread and percentiles, the
-                       histograms over time, one job's histogram and
-                       threads, the jobs and kernels.
+  rt-test-detail.json  "RT test detail": one board, flavor and test.
+                       Per thread and percentiles over the release
+                       rounds, one round's histogram and threads, the
+                       rounds, jobs, problems and kernels.
 
 `round export` labels the samples with round and round_kind. The round
 trends use Grafana's Trend panel (Grafana 10 or later): the round, a
 label, becomes the x value, so only release rounds (numbers) go there;
-test rounds (t3) are compared in the two-round bars. The round_kind
-variable (release by default) keeps test rounds out of everything else
-unless chosen; samples without the label (jobs outside the archive)
-show in the time-based detail dashboard. The workload variable picks
-the background load (idle, hackbench, stress-ng-class-<c>, ...).
+test rounds (t3) are compared in the two-round bars and can be picked
+as the round in depth. The round_kind variable (release by default)
+keeps test rounds out of everything else unless chosen; samples
+without the label (jobs outside the archive) still count in the tables.
+The workload variable picks the background load (idle, hackbench,
+stress-ng-class-<c>, ...).
 
 Every job is a handful of samples at the job's end time, not a
-continuous series: the detail trends take each job's value per interval
-(last_over_time over $__interval) and join the points; round trends
-and tables take the largest value over the dashboard's time range (a
-year on the overview).
+continuous series: the panels are instant queries that take the
+largest value over the dashboard's time range (a year), grouped by
+round. Time is no axis: when a round ran is in the Rounds table.
 """
 
 DS = {"type": "prometheus", "uid": "victoriametrics"}
@@ -74,14 +74,15 @@ PROBLEM_KINDS = (
 )
 
 
-def detail_url(board, flavor, test, job=None):
+def detail_url(board, flavor, test, round=None):
     """The detail dashboard for one board/flavor/test (flavor None: the
-    dashboard's default), same time range."""
+    dashboard's default), same time range; round: the round shown in
+    depth (default: the latest)."""
     url = f"/d/{DETAIL_UID}/rt-test-detail?var-board={board}&var-test={test}"
     if flavor:
         url += f"&var-flavor={flavor}"
-    if job:
-        url += f"&var-job={job}"
+    if round:
+        url += f"&var-round={round}"
     return url + "&${__url_time_range}"
 
 
@@ -120,10 +121,8 @@ class Dashboard:
         self.panels.append(p)
         return p
 
-    def job_link(self, detail=None):
-        """A table override: the Job column links to the LAVA job and,
-        with detail (board, flavor, test), to the job in the detail
-        dashboard."""
+    def job_link(self):
+        """A table override: the Job column links to the LAVA job."""
         links = [
             {
                 "title": "LAVA job ${__value.raw}",
@@ -131,15 +130,23 @@ class Dashboard:
                 "targetBlank": True,
             }
         ]
-        if detail:
-            links.append(
-                {
-                    "title": "Job ${__value.raw} in detail",
-                    "url": detail_url(*detail, job="${__value.raw}"),
-                }
-            )
         return {
             "matcher": {"id": "byName", "options": "Job"},
+            "properties": [{"id": "links", "value": links}],
+        }
+
+    @staticmethod
+    def round_link(detail):
+        """A table override: the Round column opens that round of
+        detail (board, flavor, test) in the detail dashboard."""
+        links = [
+            {
+                "title": "Round ${__value.raw} in detail",
+                "url": detail_url(*detail, round="${__value.raw}"),
+            }
+        ]
+        return {
+            "matcher": {"id": "byName", "options": "Round"},
             "properties": [{"id": "links", "value": links}],
         }
 
@@ -207,7 +214,7 @@ class Dashboard:
 
         matrix: (row label header, column label header) to pivot the
         table, e.g. one column per stat. detail: (board, flavor, test)
-        for the Job column's link into the detail dashboard. sort:
+        for the Round column's link into the detail dashboard. sort:
         (header, descending).
         """
         keep = list(columns) + ["Value"]
@@ -237,8 +244,10 @@ class Dashboard:
         if sort:
             options["sortBy"] = [{"displayName": sort[0], "desc": sort[1]}]
         overrides = []
+        if "round" in columns and detail:
+            overrides.append(self.round_link(detail))
         if "job" in columns:
-            overrides.append(self.job_link(detail))
+            overrides.append(self.job_link())
             # Job ids are labels (text): sort them as numbers.
             conversion = {"targetField": "Job", "destinationType": "number"}
             transformations.append(
@@ -263,42 +272,7 @@ class Dashboard:
             options=options,
         )
 
-    def trend(self, title, targets, x, w, h, desc="", links=None, log=True, **extra):
-        """A time series of jobs: a point per job, joined by lines
-        (spanNulls: the time between rounds has no samples). A log axis
-        by default, so one outlier doesn't flatten everything else."""
-        custom = {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "always",
-            "spanNulls": True,
-        }
-        if log:
-            custom["scaleDistribution"] = {"type": "log", "log": 10}
-        return self._panel(
-            "timeseries",
-            title,
-            x,
-            w,
-            h,
-            desc,
-            targets=[
-                self._target(expr, legend, ref=chr(ord("A") + i))
-                for i, (expr, legend) in enumerate(targets)
-            ],
-            fieldConfig={
-                "defaults": {"unit": "µs", "custom": custom, "links": links or []},
-                "overrides": [],
-            },
-            options={
-                "legend": {"displayMode": "list", "placement": "bottom"},
-                "tooltip": {"mode": "multi", "sort": "desc"},
-            },
-            **extra,
-        )
-
-    def round_trend(self, title, expr, series, x, w, h, desc="", **extra):
+    def round_trend(self, title, expr, series, x, w, h, desc="", log=True, **extra):
         """Grafana's Trend panel: the round on the x axis, a line per
         value of label series. An instant query over the dashboard's
         range gives a row per round and series; the matrix makes a
@@ -344,7 +318,9 @@ class Dashboard:
                         "pointSize": 5,
                         "showPoints": "always",
                         "spanNulls": True,
-                        "scaleDistribution": {"type": "log", "log": 10},
+                        "scaleDistribution": (
+                            {"type": "log", "log": 10} if log else {"type": "linear"}
+                        ),
                     },
                 },
                 # The defaults are for the latencies; the x axis is the
@@ -412,35 +388,6 @@ class Dashboard:
                 "barWidth": 0.9,
                 "legend": {"displayMode": "list", "placement": "bottom"},
             },
-        )
-
-    def heatmap(self, title, expr, x, w, h, desc=""):
-        """The histograms of the jobs over time: a column per job, a
-        cell per bucket (le), colored by its number of samples."""
-        self._panel(
-            "heatmap",
-            title,
-            x,
-            w,
-            h,
-            desc,
-            targets=[self._target(expr, "{{le}}", fmt="heatmap")],
-            options={
-                "calculate": False,
-                "yAxis": {"axisPlacement": "left", "unit": "µs"},
-                "rowsFrame": {"layout": "auto"},
-                "color": {
-                    "mode": "scheme",
-                    "scheme": "Oranges",
-                    "scale": "exponential",
-                    "exponent": 0.3,
-                    "fill": "dark-orange",
-                },
-                "cellGap": 1,
-                "tooltip": {"mode": "single", "yHistogram": True},
-                "legend": {"show": True},
-            },
-            fieldConfig={"defaults": {}, "overrides": []},
         )
 
     def buckets(self, title, expr, x, w, h, desc=""):
@@ -535,10 +482,6 @@ def _dashboard(
     }
 
 
-def _latency(stat, sel, window="$__interval"):
-    return f'last_over_time(srt_latency_us{{stat="{stat}", {sel}}}[{window}])'
-
-
 def build_overview(lava_url):
     """The overview dashboard as a dict."""
     d = Dashboard(lava_url)
@@ -574,7 +517,7 @@ def build_overview(lava_url):
     d.y += 4
     d.table(
         "Jobs with problems",
-        f"max by ({BY}, kernel, job, kind) "
+        f"max by ({BY}, kernel, round, job, kind) "
         f"(max_over_time(srt_job_problems{{{JOBS}}}[$__range])) > 0",
         0,
         24,
@@ -584,11 +527,12 @@ def build_overview(lava_url):
             "flavor": "Flavor",
             "test": "Test",
             "kernel": "Kernel",
+            "round": "Round",
             "job": "Job",
             "kind": "Problem",
         },
         "Count",
-        desc=PROBLEM_KINDS + " Click a job for LAVA or its test in detail.",
+        desc=PROBLEM_KINDS + " Click a job for LAVA, a round for its test in detail.",
         detail=tuple(f"${{__data.fields.{c}}}" for c in ("Board", "Flavor", "Test")),
         sort=("Job", True),
     )
@@ -677,74 +621,103 @@ def build_overview(lava_url):
 
 
 def build_detail(lava_url):
-    """The detail dashboard (one board, flavor and test) as a dict."""
+    """The detail dashboard (one board, flavor and test) as a dict: the
+    release rounds side by side, and one round in depth."""
     d = Dashboard(lava_url)
-    BUCKET = f"srt_latency_bucket{{{ONE}}}"
-    JOB = ONE + ', job="$job"'
+    # The round trends: release rounds only, their round is a number.
+    BYROUND = (
+        'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel", '
+        + WL
+        + ", "
+        + RELEASE
+    )
+    # The round shown in depth.
+    ROUND = ONE + ', round="$round"'
     detail = ("$board", "$flavor", "$test")
 
-    d.row("Trends")
-    d.trend(
+    def per_round(stat, by):
+        return (
+            f"max by (round, {by}) (max_over_time(srt_latency_us"
+            f'{{stat="{stat}", {BYROUND}}}[$__range]))'
+        )
+
+    def quantile(q, name):
+        return (
+            f"label_set(histogram_quantile({q}, sum by (round, le) "
+            f"(max_over_time(srt_latency_bucket{{{BYROUND}}}[$__range]))), "
+            f'"series", "{name}")'
+        )
+
+    d.row("By round")
+    d.round_trend(
         "Max latency per thread",
-        [(f"max by (thread) ({_latency('max', ONE)})", "{{thread}}")],
+        per_round("max", "thread"),
+        "thread",
         0,
         12,
         9,
-        desc="Each point is a job. t: thread (cyclictest: thread index, rtla: "
-        "CPU), i: rtla's IRQ, u: rtla's user-space thread. Log scale.",
+        desc="Max latency of each thread in each release round. t: thread "
+        "(cyclictest: thread index, rtla: CPU), i: rtla's IRQ, u: rtla's "
+        "user-space thread. Log scale.",
     )
-    d.trend(
+    d.round_trend(
         "Percentiles (all threads)",
-        [
-            (
-                f"histogram_quantile({q}, sum by (le) "
-                f"(last_over_time({BUCKET}[$__interval])))",
-                name,
-            )
-            for q, name in ((0.5, "p50"), (0.99, "p99"), (0.999, "p99.9"))
-        ]
-        + [(f"max({_latency('max', ONE)})", "max")],
+        " or ".join(
+            [quantile(q, n) for q, n in ((0.5, "p50"), (0.99, "p99"), (0.999, "p99.9"))]
+            + [
+                'label_set(max by (round) (max_over_time(srt_latency_us{stat="max", '
+                f'{BYROUND}}}[$__range])), "series", "max")'
+            ]
+        ),
+        "series",
         12,
         12,
         9,
         desc="From the uploaded histograms (cyclictest, rtla), all threads of "
-        "a job together; estimated within the bucket (5, 10, 20, 30, 50, 75, "
+        "a round together; estimated within the bucket (5, 10, 20, 30, 50, 75, "
         "100, 150, 200, 300, 500, 750, 1000, 2000 us). max: the test's own "
         "result. Log scale.",
     )
     d.y += 9
-    d.heatmap(
-        "Histograms over time",
-        f"sum by (le) (last_over_time({BUCKET}[$__interval]))",
-        0,
-        12,
-        9,
-        desc="A column per job: how many samples fell into each latency "
-        "bucket, all threads together. A shift up is a slower kernel or board.",
-    )
-    d.trend(
+    d.round_trend(
         "Average latency per thread",
-        [(f"max by (thread) ({_latency('avg', ONE)})", "{{thread}}")],
-        12,
+        per_round("avg", "thread"),
+        "thread",
+        0,
         12,
         9,
         log=False,
     )
+    d.table(
+        "Rounds",
+        f'max by (round, kernel) (max_over_time(srt_latency_us{{stat="max", '
+        f"{ONE}}}[$__range]))",
+        12,
+        12,
+        9,
+        {"round": "Round", "kernel": "Kernel"},
+        "Max (us)",
+        desc="Max latency of each round, release and test rounds as chosen at "
+        "the top. Click a round to show it below.",
+        detail=detail,
+        sort=("Round", True),
+    )
     d.y += 9
 
-    d.row("Job $job")
+    d.row("Round $round")
     d.buckets(
-        "Histogram of job $job",
-        f"sum by (le) (max_over_time(srt_latency_bucket{{{JOB}}}[$__range]))",
+        "Histogram of round $round",
+        f"sum by (le) (max_over_time(srt_latency_bucket{{{ROUND}}}[$__range]))",
         0,
         12,
         10,
-        desc="Samples per latency bucket, all threads together. Pick the job "
-        "at the top or in the job list below (latest by default).",
+        desc="Samples per latency bucket, all threads (and with workload All, "
+        "all workloads) of the round together. Pick the round at the top or in "
+        "the Rounds table (latest by default).",
     )
     d.table(
-        "Threads of job $job",
-        f"max by (thread, stat) (max_over_time(srt_latency_us{{{JOB}}}[$__range]))",
+        "Threads of round $round",
+        f"max by (thread, stat) (max_over_time(srt_latency_us{{{ROUND}}}[$__range]))",
         12,
         12,
         10,
@@ -757,25 +730,31 @@ def build_detail(lava_url):
     d.row("Jobs and kernels")
     d.table(
         "Jobs",
-        f'max by (job, kernel) (max_over_time(srt_latency_us{{stat="max", '
-        f"{ONE}}}[$__range]))",
+        "max by (round, job, workload, kernel) (max_over_time(srt_latency_us"
+        f'{{stat="max", {ONE}}}[$__range]))',
         0,
         10,
         10,
-        {"job": "Job", "kernel": "Kernel"},
+        {"round": "Round", "job": "Job", "workload": "Workload", "kernel": "Kernel"},
         "Max (us)",
-        desc="Max latency of each job. Click a job for LAVA or to show it above.",
+        desc="Max latency of each job. Click a job for LAVA, a round to show it "
+        "above.",
         detail=detail,
         sort=("Job", True),
     )
+    # A combined job's job-level series carry the job's test (rt-tests),
+    # not this one: take the problems of the jobs with results for it.
+    jobs = 'board="$board", flavor="$flavor", kernel=~"$kernel", ' + KIND
     d.table(
         "Problems",
-        f"max by (kernel, job, kind) "
-        f"(max_over_time(srt_job_problems{{{ONE}}}[$__range])) > 0",
+        f"(max by (round, job, kernel, kind) "
+        f"(max_over_time(srt_job_problems{{{jobs}}}[$__range])) > 0) "
+        f"and on (job) count by (job) "
+        f"(max_over_time(srt_latency_us{{{ONE}}}[$__range]))",
         10,
         8,
         10,
-        {"job": "Job", "kernel": "Kernel", "kind": "Problem"},
+        {"round": "Round", "job": "Job", "kernel": "Kernel", "kind": "Problem"},
         "Count",
         desc=PROBLEM_KINDS,
         detail=detail,
@@ -798,7 +777,8 @@ def build_detail(lava_url):
     return _dashboard(
         DETAIL_UID,
         "RT test detail",
-        "One board, flavor and test of the PREEMPT_RT test rounds in LAVA.",
+        "One board, flavor and test of the PREEMPT_RT test rounds in LAVA: the "
+        "release rounds side by side, one round in depth.",
         lava_url,
         d.panels,
         [
@@ -816,18 +796,19 @@ def build_detail(lava_url):
                 False,
                 False,
             ),
-            _var("kernel", f"label_values(srt_job_ok{{{sel}}}, kernel)"),
+            _var("kernel", f"label_values(srt_latency_us{{{sel}}}, kernel)"),
             _workload_var(sel),
             _round_kind_var(),
             _var(
-                "job",
-                f'label_values(srt_job_ok{{{sel}, kernel=~"$kernel"}}, job)',
+                "round",
+                f"label_values(srt_latency_us{{{sel}, {ROUNDS}}}, round)",
                 False,
                 False,
                 sort=4,
             ),
         ],
         [{"title": "RT tests", "url": f"/d/{OVERVIEW_UID}", "type": "link"}],
+        since="now-1y",
     )
 
 

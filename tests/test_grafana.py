@@ -116,15 +116,26 @@ def test_rounds_on_the_x_axis():
 
 @pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
 def test_release_rounds_by_default(d):
-    """Test rounds stay out unless chosen (the round trends: release
-    only); samples without a round (jobs export) stay in."""
+    """Test rounds stay out unless chosen; samples without a round
+    (jobs export) stay in. The round trends: release rounds only."""
     (v,) = [v for v in d["templating"]["list"] if v["name"] == "round_kind"]
     assert v["current"]["value"] == "release"
-    for q in queries(d):
-        if "panel" in q and "srt_" in q["expr"]:
-            assert "round_kind=~" in q["expr"] or (
-                q["panel"] == "$test" and 'round_kind="release"' in q["expr"]
-            ), q
+    for p in d["panels"]:
+        for t in p.get("targets", []):
+            if p["type"] == "trend":
+                assert 'round_kind="release"' in t["expr"], p["title"]
+            else:
+                assert "round_kind=~" in t["expr"], p["title"]
+
+
+@pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
+def test_rounds_not_time(d):
+    """Time is no axis: no time series or heatmaps, only instant
+    queries."""
+    for p in d["panels"]:
+        assert p["type"] not in ("timeseries", "heatmap"), p["title"]
+        for t in p.get("targets", []):
+            assert t["instant"], p["title"]
 
 
 def test_links_between_dashboards_and_to_lava():
@@ -134,13 +145,14 @@ def test_links_between_dashboards_and_to_lava():
     assert f"/d/{OVERVIEW_UID}" in detail
     for text in (overview, detail):
         assert "http://lava.example:10070/scheduler/job/${__value.raw}" in text
-    assert "var-job=${__value.raw}" in detail
+    assert "var-round=${__value.raw}" in detail
+    assert "var-round=${__value.raw}" in overview
 
 
 def test_detail_shows_one_board_flavor_and_test():
     d = ALL["rt-test-detail.json"]
     single = {v["name"] for v in d["templating"]["list"] if not v["multi"]}
-    assert {"board", "flavor", "test", "job"} <= single
+    assert {"board", "flavor", "test", "round"} <= single
     for q in queries(d):
         if "panel" in q and "srt_" in q["expr"]:
             assert 'board="$board"' in q["expr"], q
@@ -169,6 +181,33 @@ def test_workload_all_matches_missing_label(d):
 
 
 def test_overview_spans_a_year():
-    """The round trends take everything in the range."""
-    assert ALL["rt-tests.json"]["time"]["from"] == "now-1y"
-    assert ALL["rt-test-detail.json"]["time"]["from"] == "now-90d"
+    """The panels take everything in the range."""
+    for d in DASHBOARDS:
+        assert d["time"]["from"] == "now-1y"
+
+
+def test_detail_by_round():
+    """Per thread and percentiles over the rounds; the percentiles are
+    one query, a series per quantile and the test's own max."""
+    d = ALL["rt-test-detail.json"]
+    trends = {p["title"]: p for p in d["panels"] if p["type"] == "trend"}
+    assert set(trends) == {
+        "Max latency per thread",
+        "Percentiles (all threads)",
+        "Average latency per thread",
+    }
+    expr = trends["Percentiles (all threads)"]["targets"][0]["expr"]
+    for name in ("p50", "p99", "p99.9", "max"):
+        assert f'"series", "{name}")' in expr
+    assert expr.count(" or ") == 3
+
+
+def test_detail_problems_of_the_jobs_with_the_test():
+    """A combined job's job-level series carry its own test (rt-tests),
+    so the problems are those of the jobs with results for this test."""
+    d = ALL["rt-test-detail.json"]
+    (p,) = [p for p in d["panels"] if p["title"] == "Problems"]
+    expr = p["targets"][0]["expr"]
+    assert "and on (job)" in expr
+    head = expr.split("and on (job)")[0]
+    assert 'test="$test"' not in head
