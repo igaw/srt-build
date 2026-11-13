@@ -102,6 +102,12 @@ def test_rounds_on_the_x_axis():
         "round\\series": "Round"
     }
     assert p["options"]["xField"] == "Round"
+    # The latencies' unit and log scale stay off the x axis.
+    (o,) = p["fieldConfig"]["overrides"]
+    assert o["matcher"] == {"id": "byName", "options": "Round"}
+    props = {x["id"]: x["value"] for x in o["properties"]}
+    assert props["unit"] == "none" and props["decimals"] == 0
+    assert props["custom.scaleDistribution"] == {"type": "linear"}
     (bars,) = [p for p in d["panels"] if p["type"] == "barchart"]
     assert [t["legendFormat"] for t in bars["targets"]] == ["$round_a", "$round_b"]
     for t in bars["targets"]:

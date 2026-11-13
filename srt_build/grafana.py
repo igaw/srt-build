@@ -347,7 +347,21 @@ class Dashboard:
                         "scaleDistribution": {"type": "log", "log": 10},
                     },
                 },
-                "overrides": [],
+                # The defaults are for the latencies; the x axis is the
+                # round: a plain whole number on a linear scale.
+                "overrides": [
+                    {
+                        "matcher": {"id": "byName", "options": "Round"},
+                        "properties": [
+                            {"id": "unit", "value": "none"},
+                            {"id": "decimals", "value": 0},
+                            {
+                                "id": "custom.scaleDistribution",
+                                "value": {"type": "linear"},
+                            },
+                        ],
+                    }
+                ],
             },
             options={
                 "xField": "Round",
