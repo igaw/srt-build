@@ -12,7 +12,7 @@ definitions:
   name: rtla-timerlat
   parameters:
     DURATION: "{{ rtla_timerlat.duration|default('1m') }}"
-    PRIORITY: "f:98"
+    RT_PRIORITY: "f:98"
     BACKGROUND_CMD: "taskset -c {{ housekeeping_cpus }} {{ rtla_timerlat.background_cmd|default('hackbench') }}"
     CPUS: "{{ isolcpus }}"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"

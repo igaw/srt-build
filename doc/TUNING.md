@@ -32,7 +32,7 @@ Numbers in parentheses like (job 474) are LAVA jobs of our lab; a
 | Kernel log check fails on an OOM kill | `jobs/job-base.jinja2` | A latency measured while memory ran out is worthless |
 | Report: max latency above 1 ms is a problem | `srt_build/report.py` | A Complete job can still have measured 15 s |
 | One boot per flavor, fixed test order | `config.yml` `flavors: combined` | More test time per round, same conditions for every test |
-| rtla timerlat: user-space threads, FIFO 98 | test-definitions `rtla-timerlat.sh`, `PRIORITY` in the jobs | Comparable to cyclictest |
+| rtla timerlat: user-space threads, FIFO 98 | test-definitions `rtla-timerlat.sh`, `RT_PRIORITY` in the jobs | Comparable to cyclictest |
 
 ## The boards
 
