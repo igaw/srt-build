@@ -23,7 +23,8 @@ system_config = {
     "base-tool-path": ".",
     "jobfiles-path": os.path.expanduser("~/.cache/srt-build/jobs"),
     "result-path": os.path.expanduser("~/.cache/srt-build/results"),
-    "database-path": os.path.expanduser("~/.cache/srt-build/jobs.db"),
+    # The round archive (doc/ROUNDS.md): every round srt-build submitted.
+    "round-archive": os.path.expanduser("~/.local/share/srt-build/rounds"),
 }
 
 kernel_config = {}
@@ -32,6 +33,8 @@ rt_suites = []
 suites = []
 # Flavors that boot another flavor's kernel and/or add kernel arguments
 flavors = {}
+# config.yml rounds: what `round start` submits, test round retention
+rounds = {}
 
 
 def _read_config():
@@ -77,5 +80,8 @@ def load_config():
     if "flavors" in loaded_cfg:
         flavors.clear()
         flavors.update(loaded_cfg["flavors"] or {})
+    if "rounds" in loaded_cfg:
+        rounds.clear()
+        rounds.update(loaded_cfg["rounds"] or {})
 
     return system_config, kernel_config, machine_config, rt_suites, suites
