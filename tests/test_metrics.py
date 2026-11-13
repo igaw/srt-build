@@ -217,6 +217,55 @@ def test_combined_job_samples_per_test():
     assert hist == {"rtla-timerlat"}
 
 
+def test_same_upload_name_from_two_tests():
+    """rtla-timerlat-idle and rtla-timerlat of a combined job both
+    upload rtla-timerlat.json: both histograms count, each its test's."""
+    from srt_build.report import summarize_job
+
+    from srt_build.metrics import artifact_suites
+
+    suites = [
+        {"id": 1, "name": "lava"},
+        {"id": 3, "name": "1_rtla-timerlat-idle"},
+        {"id": 5, "name": "3_rtla-timerlat"},
+        {"id": 6, "name": "4_cyclictest"},
+    ]
+
+    def upload(suite, path):
+        md = f"reference: http://a.lan/artifacts/{path}\n"
+        return {"name": "test-attachment", "result": "pass", "suite": suite,
+                "metadata": md}  # fmt: skip
+
+    tests = [
+        {"name": "u0-max-latency", "result": "pass", "suite": 3, "measurement": "9"},
+        {"name": "u0-max-latency", "result": "pass", "suite": 5, "measurement": "8"},
+        upload(3, "12/27/rtla-timerlat.json"),
+        upload(5, "12/35/rtla-timerlat.json"),
+        upload(6, "12/43/cyclictest.json"),
+    ]
+    urls = artifact_urls(tests)
+    assert urls == {
+        "3-rtla-timerlat.json": "http://a.lan/artifacts/12/27/rtla-timerlat.json",
+        "5-rtla-timerlat.json": "http://a.lan/artifacts/12/35/rtla-timerlat.json",
+        "cyclictest.json": "http://a.lan/artifacts/12/43/cyclictest.json",
+    }
+    assert artifact_suites(tests) == {
+        "3-rtla-timerlat.json": 3,
+        "5-rtla-timerlat.json": 5,
+        "cyclictest.json": 6,
+    }
+    job = _job(description="rt-tests")
+    s = summarize_job(job, tests, suites)
+    doc = {"thread": {"0": {"histogram": {"10": 5}, "count": 5}}}
+    samples = job_samples(job, tests, s, {name: doc for name in urls})
+    hist = {
+        x["metric"]["test"]
+        for x in samples
+        if x["metric"]["__name__"] == "srt_latency_bucket"
+    }
+    assert hist == {"rtla-timerlat-idle", "rtla-timerlat", "cyclictest"}
+
+
 def test_single_test_job_keeps_its_test():
     from srt_build.report import combined_suite_tests
 

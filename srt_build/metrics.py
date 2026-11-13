@@ -24,6 +24,7 @@ rounds can be exported later the same way.
 
 import json
 import re
+from collections import Counter
 from datetime import datetime
 
 import yaml
@@ -259,14 +260,24 @@ def histogram_samples(doc, labels, ts):
 
 def artifact_suites(tests):
     """{file name: suite id} of the JSON files a job uploaded."""
-    return {
-        name: t.get("suite") for t in tests for name, _ in artifact_urls([t]).items()
-    }
+    return {key: suite for key, suite, _ in uploads(tests)}
 
 
 def artifact_urls(tests):
-    """The JSON files a job uploaded to artifactorial, {name: url}."""
-    urls = {}
+    """The JSON files a job uploaded to artifactorial, {name: url}.
+
+    A name that more than one suite uploaded (a combined job's rtla
+    tests all write rtla-timerlat.json, in other minutes, so
+    artifactorial doesn't rename them) gets its suite id in front,
+    "<suite>-<name>": keyed by the bare name, all but the last test's
+    histograms were lost (round 12, jobs 912, 924, 926, 941, 953, 955).
+    """
+    return {key: url for key, _, url in uploads(tests)}
+
+
+def uploads(tests):
+    """[(name, suite id, url)] of the JSON uploads, names unique."""
+    found = []
     for t in tests:
         if t.get("name") != "test-attachment" or t.get("result") != "pass":
             continue
@@ -276,8 +287,12 @@ def artifact_urls(tests):
             continue
         url = str(md.get("reference") or "") if isinstance(md, dict) else ""
         if url.endswith(".json"):
-            urls[url.rsplit("/", 1)[-1]] = url
-    return urls
+            found.append((url.rsplit("/", 1)[-1], t.get("suite"), url))
+    names = Counter(name for name, _, _ in found)
+    return [
+        (name if names[name] == 1 else f"{suite}-{name}", suite, url)
+        for name, suite, url in found
+    ]
 
 
 def to_jsonl(samples):
