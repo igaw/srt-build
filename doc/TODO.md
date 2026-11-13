@@ -139,9 +139,6 @@ repository's, then a private one on top of it.
 
 - Linaro/test-definitions PR #652: a draft until rounds 12 and 13 come
   back clean with the final series, then ready for review.
-- The rtla mlock patch upstream: the patched rtla holds about 25 MB
-  resident per measuring thread on rpi3-64 (TUNING.md, open
-  questions); worth a remark on the patch.
 - The scheduler WARNING under stress-ng cpu-sched on rpi3-64 (TUNING.md,
   open questions): check it against mainline, then report upstream.
 - The rootfs (kiwi-lava): procps' `ps` and `pkill` fail on kernels

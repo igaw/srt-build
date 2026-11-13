@@ -422,6 +422,14 @@ posted upstream (rtla/timerlat: Lock the memory of the user-space
 threads). Until a kernel with it is in the lab, read the stress tests'
 **Thr** column (kernel side): it does not depend on rtla's memory.
 
+The price: each measuring process (rtla forks one per CPU) locks a
+resident copy of rtla's whole memory, about 25 MB on rpi3-64. mlockall()
+faults private writable pages in with a write fault, which breaks
+copy-on-write with the parent (mm/gup.c). Accepted (2026-11-13):
+correct measurements come first, and cyclictest -m pays the same kind
+of price. Under memory pressure it makes a measuring process the OOM
+killer's likely choice (hack job 771); the rounds have no OOM stressors.
+
 ## Board and lab quirks
 
 **bbb: the Ethernet PHY is sometimes missing after power-on.** U-Boot
@@ -594,10 +602,6 @@ looked like lab problems until we looked closer.
   `cpuset_cpus_allowed` <- `sched_setaffinity`. PREEMPT_RT specific
   (the cpuset lock is an rt_mutex); not yet checked against mainline.
   cpu-sched is excluded from the class jobs, so rounds won't hit it.
-- The patched rtla (memory locked) holds about 25 MB resident per
-  measuring thread on rpi3-64, which made one of them the OOM killer's
-  choice (hack job 771). With the OOM stressors gone this should not
-  happen, but it is worth a remark on the patch.
 - stress-ng: varyload and workload stopped class runs at 1.1-1.4 ms
   on the Pis (5 of 130 runs); not traced further. mutex alone on c2d
   (2-2.6 ms) and hrtimers alone on c2d (3.9 ms) only matter if they
