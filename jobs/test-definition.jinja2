@@ -5,6 +5,10 @@
   relative to automated/linux/, params are the test's own parameters, in
   order; every value is passed as a string.
 
+  history: false drops the clone's .git (20 of its 75 MB): LAVA keeps a
+  copy per definition, three times over (overlay, tarball, rootfs), and
+  a combined job has a dozen of them. LAVA records the commit before.
+
   {% import 'test-definition.jinja2' as td with context %}
   {{ td.definition('cyclictest/cyclictest.yaml', 'cyclictest', {
       'DURATION': cyclictest.duration|default('1m'),
@@ -14,6 +18,7 @@
 - repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
   from: git
   branch: {{ test_definitions_branch|default('master') }}
+  history: false
   path: automated/linux/{{ path }}
   name: {{ name }}
   parameters:

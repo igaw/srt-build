@@ -247,3 +247,24 @@ def test_definitions_through_macro():
                 text = f.read()
             assert "test_definitions_url" not in text, path
             assert "ARTIFACTORIAL" not in text, path
+
+
+@pytest.mark.parametrize("flavor", FLAVORS)
+def test_definitions_without_history(monkeypatch, flavor):
+    """test-definitions is cloned without .git: a combined job carries
+    a dozen copies, three times over, on the LAVA server's disk (it ran
+    full in round 12)."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "rpi3-64"
+    ctx = SimpleNamespace(**{"hostname": board, **CFG["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, flavor, job_ctx)
+    for path, tctx in _templates(flavor, job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
+        for action in job["actions"]:
+            for d in (action.get("test") or {}).get("definitions") or []:
+                if d.get("from") == "git" and "test-definitions" in str(
+                    d.get("repository")
+                ):
+                    assert d.get("history") is False, (path, d["name"])
