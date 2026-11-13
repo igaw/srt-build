@@ -360,8 +360,8 @@ Round 11 (jobs 730-753, rtla timerlat) still measured 4-185 ms in
 the scheduler class and 13-168 ms in the os class on bbb and the Pis,
 with the stressors above excluded. No stressor on its own came close.
 A night of traced runs on all four boards (hack jobs 755-777,
-`contrib/hack/stress-night.sh`, data in `~/lava-runs/night1`) found
-the cause:
+`contrib/hack/stress-night.sh`; its data was deleted 2026-11-13, what
+it showed is below) found the cause:
 
 - The job's own command ran for 2 hours per class and board under
   `rtla timerlat top -a 1000` (stop at 1 ms, keep the trace): 77 stops
