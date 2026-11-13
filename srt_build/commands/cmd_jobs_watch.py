@@ -6,7 +6,7 @@ every job has finished and no new job appeared for --settle seconds
 (srt-build submits board by board, as each kernel is built).
 
   srt-build jobs watch --since 12
-  srt-build jobs watch bbb --save ~/lava-runs/r4
+  srt-build jobs watch bbb --save /tmp/watch
 
 Exits like `jobs report`: 1 if any job has a problem.
 """
@@ -16,7 +16,8 @@ import time
 
 from ..lava_api import LavaApi
 from ..report import summarize_job
-from .cmd_jobs_export import export_jobs, load_metrics_config
+from ..victoria import load_metrics_config
+from .cmd_jobs_export import export_jobs
 from .cmd_jobs_report import (
     add_selection_args,
     fetch_summaries,

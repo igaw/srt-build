@@ -2,6 +2,7 @@
 
   srt-build round import 12 --ids 912-965   backfill a round that ran
   srt-build round report [N]                fetch it into the archive, report
+  srt-build round export [N] [--dry-run]    send it to VictoriaMetrics
   srt-build round list                      the rounds in the archive
 
 A round's results are kept in the round archive (system_config
@@ -27,11 +28,15 @@ from ..archive import (
 
 
 def add_parser(subparser):
-    from . import cmd_round_report
+    from . import (
+        cmd_round_export,
+        cmd_round_report,
+    )
 
     p = subparser.add_parser("round", help="test rounds and the round archive")
     sub = p.add_subparsers(help="round commands", dest="round_cmd", required=True)
     cmd_round_report.add_parsers(sub)
+    cmd_round_export.add_parsers(sub)
 
     q = sub.add_parser("list", help="the rounds in the archive")
     q.add_argument("--test", action="store_true", help="also the test rounds")
