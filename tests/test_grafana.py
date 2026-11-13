@@ -19,7 +19,7 @@ METRICS = {
     "srt_value",
 }
 LABELS = {"board", "flavor", "test", "kernel", "job", "thread", "stat", "le"}
-LABELS |= {"kind", "srt_build", "case", "unit"}
+LABELS |= {"kind", "srt_build", "case", "unit", "round", "round_kind", "key"}
 
 
 def test_files():
@@ -73,9 +73,40 @@ def test_overview_has_a_trend_per_board_and_test():
     rows = [p for p in d["panels"] if p.get("repeat") == "board"]
     assert len(rows) == 1 and rows[0]["type"] == "row"
     trends = [p for p in d["panels"] if p.get("repeat") == "test"]
-    assert len(trends) == 1 and trends[0]["type"] == "timeseries"
-    expr = trends[0]["targets"][0]["expr"]
-    assert 'board="$board"' in expr and 'test="$test"' in expr
+    assert [p["type"] for p in trends] == ["timeseries", "trend"]
+    for p in trends:
+        expr = p["targets"][0]["expr"]
+        assert 'board="$board"' in expr and 'test="$test"' in expr
+
+
+def test_rounds_on_the_x_axis():
+    """The Trend panel: a row per round and flavor from an instant
+    query, pivoted to a column per flavor, round made a number."""
+    d = ALL["rt-tests.json"]
+    (p,) = [p for p in d["panels"] if p["type"] == "trend"]
+    t = p["targets"][0]
+    assert t["instant"] and t["format"] == "table"
+    assert t["expr"].startswith("max by (round, flavor) (max_over_time(")
+    assert 'round_kind=~"$round_kind"' in t["expr"]
+    ids = [x["id"] for x in p["transformations"]]
+    assert ids == ["groupingToMatrix", "organize", "convertFieldType", "sortBy"]
+    assert p["transformations"][1]["options"]["renameByName"] == {
+        "round\\flavor": "Round"
+    }
+    assert p["options"]["xField"] == "Round"
+    (bars,) = [p for p in d["panels"] if p["type"] == "barchart"]
+    assert [t["legendFormat"] for t in bars["targets"]] == ["$round_a", "$round_b"]
+
+
+@pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
+def test_release_rounds_by_default(d):
+    """Test rounds stay out unless chosen; samples without a round
+    (jobs export) stay in."""
+    (v,) = [v for v in d["templating"]["list"] if v["name"] == "round_kind"]
+    assert v["current"]["value"] == "release"
+    for q in queries(d):
+        if "panel" in q and "srt_" in q["expr"]:
+            assert "round_kind=~" in q["expr"], q
 
 
 def test_links_between_dashboards_and_to_lava():

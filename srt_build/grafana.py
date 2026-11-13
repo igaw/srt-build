@@ -13,6 +13,13 @@ the JSON.
                        over time, one job's histogram and threads, the
                        jobs and kernels.
 
+The overview also lines the rounds up (`round export` labels the
+samples with round and round_kind): per board and test a Trend panel
+with the round on the x axis, and two rounds side by side. Grafana's
+Trend panel needs Grafana 10 or later. The round_kind variable
+(release by default) keeps test rounds out unless chosen; samples
+without the label (`jobs export`) always show in the time trends.
+
 Every job is a handful of samples at the job's end time, not a
 continuous series: trends take each job's value per interval
 (last_over_time over $__interval) and join the points; tables take the
@@ -23,14 +30,20 @@ DS = {"type": "prometheus", "uid": "victoriametrics"}
 OVERVIEW_UID = "rt-tests"
 DETAIL_UID = "rt-test-detail"
 
+# Samples of the chosen round kinds, and those without round (jobs
+# export): "" matches a missing label.
+KIND = 'round_kind=~"$round_kind|"'
 # The overview's variables, as label matchers.
-SEL = 'board=~"$board", flavor=~"$flavor", test=~"$test", kernel=~"$kernel"'
+SEL = 'board=~"$board", flavor=~"$flavor", test=~"$test", kernel=~"$kernel", ' + KIND
 # For the job counts and problems: all tests, also those without
 # latencies (smoke-tests, isolcpus, pi-stress), which $test leaves out.
-JOBS = 'board=~"$board", flavor=~"$flavor", kernel=~"$kernel"'
+JOBS = 'board=~"$board", flavor=~"$flavor", kernel=~"$kernel", ' + KIND
 BY = "board, flavor, test"
 # The detail dashboard's: one board, flavor and test.
-ONE = 'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel"'
+ONE = 'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel", ' + KIND
+# Round samples only, of the chosen kinds.
+ROUNDS = 'round_kind=~"$round_kind"'
+
 PROBLEM_KINDS = (
     "health: job not Complete; failed: failed test cases (e.g. "
     "kernel-log-clean); uploads: failed uploads; no_results: a test "
@@ -264,6 +277,107 @@ class Dashboard:
             **extra,
         )
 
+    def round_trend(self, title, expr, series, x, w, h, desc="", **extra):
+        """Grafana's Trend panel: the round on the x axis, a line per
+        value of label series. An instant query over the dashboard's
+        range gives a row per round and series; the matrix makes a
+        column per series, and round (a label, text) becomes a number
+        for the x axis. Test rounds (t3) aren't numbers: release only."""
+        return self._panel(
+            "trend",
+            title,
+            x,
+            w,
+            h,
+            desc,
+            targets=[self._target(expr, instant=True, fmt="table")],
+            transformations=[
+                {
+                    "id": "groupingToMatrix",
+                    "options": {
+                        "rowField": "round",
+                        "columnField": series,
+                        "valueField": "Value",
+                    },
+                },
+                {
+                    "id": "organize",
+                    "options": {"renameByName": {f"round\\{series}": "Round"}},
+                },
+                {
+                    "id": "convertFieldType",
+                    "options": {
+                        "conversions": [
+                            {"targetField": "Round", "destinationType": "number"}
+                        ]
+                    },
+                },
+                {"id": "sortBy", "options": {"sort": [{"field": "Round"}]}},
+            ],
+            fieldConfig={
+                "defaults": {
+                    "unit": "µs",
+                    "custom": {
+                        "drawStyle": "line",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "always",
+                        "spanNulls": True,
+                        "scaleDistribution": {"type": "log", "log": 10},
+                    },
+                },
+                "overrides": [],
+            },
+            options={
+                "xField": "Round",
+                "legend": {"displayMode": "list", "placement": "bottom"},
+                "tooltip": {"mode": "multi", "sort": "desc"},
+            },
+            **extra,
+        )
+
+    def round_bars(self, title, rounds, sel, x, w, h, desc=""):
+        """Two rounds side by side: a bar per board and test for each."""
+        targets = []
+        for i, rnd in enumerate(rounds):
+            expr = (
+                "label_join(max by (board, test) (max_over_time(srt_latency_us"
+                f'{{stat="max", round="{rnd}", {sel}}}[$__range])), '
+                '"key", " ", "board", "test")'
+            )
+            targets.append(
+                self._target(expr, rnd, instant=True, fmt="table", ref=chr(65 + i))
+            )
+        return self._panel(
+            "barchart",
+            title,
+            x,
+            w,
+            h,
+            desc,
+            targets=targets,
+            transformations=[
+                {"id": "joinByField", "options": {"byField": "key", "mode": "outer"}},
+                {
+                    "id": "organize",
+                    "options": {
+                        "renameByName": {
+                            f"Value #{chr(65 + i)}": rnd for i, rnd in enumerate(rounds)
+                        },
+                        "excludeByName": {"Time": True, "Time 1": True, "Time 2": True},
+                    },
+                },
+            ],
+            fieldConfig={"defaults": {"unit": "µs"}, "overrides": []},
+            options={
+                "xField": "key",
+                "orientation": "horizontal",
+                "groupWidth": 0.8,
+                "barWidth": 0.9,
+                "legend": {"displayMode": "list", "placement": "bottom"},
+            },
+        )
+
     def heatmap(self, title, expr, x, w, h, desc=""):
         """The histograms of the jobs over time: a column per job, a
         cell per bucket (le), colored by its number of samples."""
@@ -316,6 +430,23 @@ class Dashboard:
                 },
             },
         )
+
+
+def _round_kind_var():
+    """release by default: test rounds only when chosen."""
+    return {
+        "name": "round_kind",
+        "label": "round kind",
+        "type": "custom",
+        "query": "release,test",
+        "options": [
+            {"text": v, "value": v, "selected": v == "release"}
+            for v in ("release", "test")
+        ],
+        "current": {"text": "release", "value": "release"},
+        "multi": True,
+        "includeAll": True,
+    }
 
 
 def _var(name, query, multi=True, include_all=True, sort=1):
@@ -418,7 +549,9 @@ def build_overview(lava_url):
 
     # One row per board, one trend per test in it.
     d.row("$board", repeat="board")
-    one_test = 'board="$board", test="$test", flavor=~"$flavor", kernel=~"$kernel"'
+    one_test = (
+        'board="$board", test="$test", flavor=~"$flavor", kernel=~"$kernel", ' + KIND
+    )
     p = d.trend(
         "$test",
         [(f"max by (flavor) ({_latency('max', one_test)})", "{{flavor}}")],
@@ -439,6 +572,37 @@ def build_overview(lava_url):
     )
     p["links"] = [{"title": "Details", "url": detail_url("$board", None, "$test")}]
     d.y += 6
+    by_round = (
+        'board="$board", test="$test", flavor=~"$flavor", kernel=~"$kernel", ' + ROUNDS
+    )
+    d.round_trend(
+        "$test by round",
+        f'max by (round, flavor) (max_over_time(srt_latency_us{{stat="max", '
+        f"{by_round}}}[$__range]))",
+        "flavor",
+        0,
+        4,
+        6,
+        desc="Max latency of each round (largest of its jobs and threads), the "
+        "round on the x axis, a line per flavor; log scale. Release rounds.",
+        repeat="test",
+        repeatDirection="h",
+        maxPerRow=6,
+    )
+    d.y += 6
+
+    d.row("Two rounds")
+    d.round_bars(
+        "Round $round_a and $round_b",
+        ["$round_a", "$round_b"],
+        'flavor=~"$flavor", board=~"$board", test=~"$test", ' + ROUNDS,
+        0,
+        24,
+        12,
+        desc="Max latency per board and test in each of the two rounds chosen "
+        "at the top.",
+    )
+    d.y += 12
 
     return _dashboard(
         OVERVIEW_UID,
@@ -458,6 +622,21 @@ def build_overview(lava_url):
             _var(
                 "kernel",
                 'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor"}, kernel)',
+            ),
+            _round_kind_var(),
+            _var(
+                "round_a",
+                "label_values(srt_job_ok{" + ROUNDS + "}, round)",
+                False,
+                False,
+                sort=4,
+            ),
+            _var(
+                "round_b",
+                "label_values(srt_job_ok{" + ROUNDS + "}, round)",
+                False,
+                False,
+                sort=4,
             ),
         ],
         [{"title": "RT test detail", "url": f"/d/{DETAIL_UID}", "type": "link"}],
@@ -605,6 +784,7 @@ def build_detail(lava_url):
                 False,
             ),
             _var("kernel", f"label_values(srt_job_ok{{{sel}}}, kernel)"),
+            _round_kind_var(),
             _var(
                 "job",
                 f'label_values(srt_job_ok{{{sel}, kernel=~"$kernel"}}, job)',
@@ -631,4 +811,5 @@ def queries(dashboard):
         for t in p.get("targets", []):
             yield {"panel": p["title"], "expr": t["expr"]}
     for v in dashboard["templating"]["list"]:
-        yield {"variable": v["name"], "expr": v["definition"]}
+        if v["type"] == "query":
+            yield {"variable": v["name"], "expr": v["definition"]}
