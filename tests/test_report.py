@@ -84,6 +84,15 @@ def test_scan_console_normalizes_and_dedups():
     ]
 
 
+def test_scan_console_flags_oom_kill():
+    lines = [
+        "[ 1527.183792] stress-ng-mmaph invoked oom-killer: gfp_mask=0x140cca",
+        # LAVA echoes the kernel-log step; its pattern is no finding
+        "+ export 'KLOG_BAD=WARNING: CPU:|invoked oom-kil[l]er'",
+    ]
+    assert scan_console(lines) == [("kernel", "stress-ng-mmaph invoked oom-killer")]
+
+
 def test_crashed_parser_reported_although_complete():
     tests = [
         case("0_rtla-osnoise", suite=LAVA),

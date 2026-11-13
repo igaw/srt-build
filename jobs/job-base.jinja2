@@ -94,7 +94,10 @@ actions:
     out by their header.
     LAVA's shell echoes each step to the console (set -x), where `jobs
     report` scans for kernel problems: Oop[s] and IN[F]O match what Oops
-    and INFO would, but the echoed step doesn't look like a finding. #}
+    and INFO would, but the echoed step doesn't look like a finding.
+    An OOM kill is a finding too: with memory exhausted, no latency
+    measured at the time means anything (and the OOM killer may have
+    taken the measuring tool). #}
   - test:
       timeout:
         minutes: 1
@@ -109,6 +112,6 @@ actions:
             description: "no stalls, warnings or oopses in the kernel log"
           run:
             steps:
-            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oop[s]|rcu: IN[F]O|stall on CPU|blocked for more than"'
+            - 'export KLOG_BAD="WARNING: CPU:|BUG:|Oop[s]|rcu: IN[F]O|stall on CPU|blocked for more than|invoked oom-kil[l]er"'
             - 'export KLOG_OK="{{ kernel_log_known }}"'
             - lava-test-case kernel-log-clean --shell '! dmesg | grep -E "$KLOG_BAD" | grep -vE "$KLOG_OK"'

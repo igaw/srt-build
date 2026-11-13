@@ -28,7 +28,8 @@ Numbers in parentheses like (job 474) are LAVA jobs of our lab; a
 | osnoise: 800 ms runtime, rtla on CPU 0 | test-definitions `rtla-osnoise.sh` | Avoids measuring RT throttling and rtla itself |
 | bbb: boot retry | `jobs/boards/bbb.yaml` | U-Boot sometimes misses the Ethernet PHY |
 | Kernel log check after each test | `jobs/job-base.jinja2` | LAVA only looks for splats during boot |
-| stress-ng: some stressors excluded, `--oom-avoid` | `jobs/rt/stress-ng-class/` | They outrank the measurement, hand the CPU to the fair server, or flood the log |
+| stress-ng: some stressors excluded, `--oom-avoid` | `jobs/rt/stress-ng-class/` | They outrank the measurement, hand the CPU to the fair server, run the board out of memory, or flood the log |
+| Kernel log check fails on an OOM kill | `jobs/job-base.jinja2` | A latency measured while memory ran out is worthless |
 | Report: max latency above 1 ms is a problem | `srt_build/report.py` | A Complete job can still have measured 15 s |
 | One boot per flavor, fixed test order | `config.yml` `flavors: combined` | More test time per round, same conditions for every test |
 | rtla timerlat: user-space threads, FIFO 98 | test-definitions `rtla-timerlat.sh`, `PRIORITY` in the jobs | Comparable to cyclictest |
@@ -279,7 +280,8 @@ everything the other five classes run (`-x`, 106 names with the
 exclusions below), scheduler leaves out fifo and tee, memory pipe and
 pipeherd. That cut the os job from 259 stressors (65 minutes, more
 than its 1 hour measurement, so the last ones never ran) to 165 (41
-minutes, inside its 45). Before, io, network and pipe ran without
+minutes, inside its 45; 156 since the OOM stressors went, below).
+Before, io, network and pipe ran without
 `-t`, i.e. 60 s per stressor with `--seq`: network's 23 stressors
 needed 23 minutes, and its last 8 never ran in the 15 minute job.
 The lists come from stress-ng 0.22.01's sources (each stressor's
@@ -310,9 +312,33 @@ A load that runs above the measuring thread's priority measures the
 test, not the kernel. All other stressors of the two classes stayed
 below 600 us on c2d.
 
-**`--oom-avoid`** for every class: without it the memory stressors in
-the os class ran into the OOM killer (bbb job 718, c2d job 724), whose
-task dumps fill the console and the log.
+**No stressor that drives the board out of memory.** A latency
+measured while memory ran out means nothing: the kernel is reclaiming
+and killing, and the OOM killer may take the measuring tool itself.
+`--oom-avoid` (every class) makes stress-ng's workers the preferred
+victims, but did not prevent it: the night runs (hack jobs 755-777) and
+rounds 11 and the pilot still had hundreds of OOM kills, which on
+rpi3-64 took rtla three times and its measuring threads five times, and
+the systemd user manager on both Pis. Every stressor that caused an OOM
+kill on any board is left out:
+
+| Job | Stressors | OOM kills seen |
+|---|---|---|
+| scheduler | clone | 415 (rpi3-64, in the class mix) |
+| os | mmapmany, mmaphuge, mmapcow, mmap, dev-shm, shm, copy-file, dirmany, mlock, mlockmany, open | 2-110 each |
+| memory | memrate, memthrash, malloc, resources, stack | 2-62 each |
+| network | sockpair | 3 |
+
+(bigheap, brk and env were already out of the os job for the same
+reason, pilot jobs 718/724; stack now belongs to memory.) The per-
+stressor hunts attribute exactly; for the class runs the OOM report's
+task names do. An OOM kill now fails the job's `kernel-log-clean`
+check and shows in `jobs report` ("invoked oom-killer"), so a
+stressor that starts doing it on a new kernel or board shows up.
+
+memhotplug is left out of the os job too: it filled the log with about
+1300 lines of "page dumped because: unmovable page" (rpi3-64), like
+acct and led above.
 
 **The console flood itself did not cost latency** on c2d: 1231
 messages from acct in 15 s left cyclictest at 11 us (the RT kernel
@@ -551,6 +577,17 @@ looked like lab problems until we looked closer.
   round 8, is the likely cause.
 - Automatic regression checks against the reference, with a threshold
   per board and test as described above.
+- A scheduler WARNING on rpi3-64 under stress-ng cpu-sched (hack job
+  768, once): `rq->balance_callback && rq->balance_callback !=
+  &balance_push_callback` at kernel/sched/sched.h:1776
+  `__task_rq_lock`, from `rt_mutex_setprio` <- `rt_spin_unlock` <-
+  `cpuset_cpus_allowed` <- `sched_setaffinity`. PREEMPT_RT specific
+  (the cpuset lock is an rt_mutex); not yet checked against mainline.
+  cpu-sched is excluded from the class jobs, so rounds won't hit it.
+- The patched rtla (memory locked) holds about 25 MB resident per
+  measuring thread on rpi3-64, which made one of them the OOM killer's
+  choice (hack job 771). With the OOM stressors gone this should not
+  happen, but it is worth a remark on the patch.
 - stress-ng: varyload and workload stopped class runs at 1.1-1.4 ms
   on the Pis (5 of 130 runs); not traced further. mutex alone on c2d
   (2-2.6 ms) and hrtimers alone on c2d (3.9 ms) only matter if they

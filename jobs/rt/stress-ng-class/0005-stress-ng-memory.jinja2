@@ -12,7 +12,7 @@ definitions:
   parameters:
     DURATION: "15m"
     PRIORITY: "f:98"
-    BACKGROUND_CMD: "stress-ng -v --oom-avoid --class memory --seq 0 -t 15 -x pipe,pipeherd"
+    BACKGROUND_CMD: "stress-ng -v --oom-avoid --class memory --seq 0 -t 15 -x memrate,memthrash,malloc,resources,stack,pipe,pipeherd"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
 {% endblock tests -%}

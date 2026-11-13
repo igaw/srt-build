@@ -27,6 +27,8 @@ SCAN_PATTERNS = [
     ("kernel", r"INFO: task \S+ blocked[^\n]{0,40}"),
     ("kernel", r"rcu: INFO[^\n]{0,60}"),
     ("kernel", r"hung_task[^\n]{0,40}"),
+    # Measurements taken while memory ran out are worthless.
+    ("kernel", r"\S+ invoked oom-killer"),
     ("test", r"Traceback \(most recent call last\)"),
     (
         "test",
