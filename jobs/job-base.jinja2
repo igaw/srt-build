@@ -3,7 +3,7 @@ job_name: {{ job_name }}
 device_type: {{ device_type }}
 timeouts:
   job:
-    minutes: {{ 7 if boot_failure_retry else 5 }}
+    minutes: {{ 7 if boot_failure_retry|default(0) else 5 }}
   action:
     minutes: 5
   connection:
@@ -30,7 +30,7 @@ actions:
       kernel:
         url: {{ kernel_url }}
         type: {{ kernel_type }}
-{% if dtb_url %}
+{% if dtb_url|default('') %}
       dtb:
         url: {{ dtb_url }}
 {% endif %}
@@ -41,7 +41,7 @@ actions:
   - boot:
       timeout:
         minutes: 5
-{% if boot_failure_retry %}
+{% if boot_failure_retry|default(0) %}
       failure_retry: {{ boot_failure_retry }}
 {% endif %}
       method: {{ boot_method }}

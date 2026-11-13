@@ -5,6 +5,7 @@ YAML scalar would turn a step into a mapping and break LAVA's run.sh."""
 import os
 from types import SimpleNamespace
 
+import jinja2
 import pytest
 import yaml
 
@@ -39,11 +40,15 @@ def _templates(flavor, job_ctx):
                 yield path, ctx
 
 
-def test_items_one_job_each():
+def test_items_one_job_each(monkeypatch):
     """stress-ng.jinja2 makes one job per stressor in stress-ng.items,
     named after it and running it."""
-    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", "rpi3-64.yaml"))
-    job_ctx["tags"] = ["rpi3-64"]
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "rpi3-64"
+    ctx = SimpleNamespace(**{"hostname": board, **CFG["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    flavor_job_ctx(ctx, "rt", job_ctx)
     jobs = [
         yaml.safe_load(generate_job(JOBS, p, c))
         for p, c in job_templates(os.path.join(JOBS, "rt", "stress-ng"), job_ctx)
@@ -53,6 +58,22 @@ def test_items_one_job_each():
     assert names[0] == "stress-ng-access"
     params = jobs[0]["actions"][-2]["test"]["definitions"][0]["parameters"]
     assert params["BACKGROUND_CMD"] == "stress-ng -v --access 0"
+
+
+@pytest.mark.parametrize("board", sorted(CFG["machine_config"]))
+def test_smoke_job(monkeypatch, board):
+    """`srt-build smoke`'s job (no flavor) gets the job context too: a
+    template variable missing is an error, and an empty KLOG_OK would
+    let the kernel-log check pass on anything (grep -vE "")."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    ctx = SimpleNamespace(**{"hostname": board, **CFG["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    with pytest.raises(jinja2.UndefinedError):
+        generate_job(JOBS, os.path.join(JOBS, "job-smoke-tests.jinja2"), job_ctx)
+    flavor_job_ctx(ctx, "", job_ctx)
+    job = generate_job(JOBS, os.path.join(JOBS, "job-smoke-tests.jinja2"), job_ctx)
+    assert 'KLOG_OK=""' not in job
 
 
 @pytest.mark.parametrize("board", sorted(CFG["machine_config"]))

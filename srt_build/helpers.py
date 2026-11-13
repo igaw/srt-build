@@ -169,7 +169,12 @@ def _job_template(job_path, filename):
         string_loader = jinja2.DictLoader({filename: data})
         type_loader = jinja2.FileSystemLoader([job_path])
         loader = jinja2.ChoiceLoader([string_loader, type_loader])
-        env = jinja2.Environment(loader=loader, trim_blocks=True, autoescape=False)
+        env = jinja2.Environment(
+            loader=loader,
+            trim_blocks=True,
+            autoescape=False,
+            undefined=jinja2.StrictUndefined,
+        )
         _templates[key] = env.get_template(filename)
     return _templates[key]
 

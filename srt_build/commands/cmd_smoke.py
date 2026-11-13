@@ -6,6 +6,7 @@ from ..config import bcolors
 from ..helpers import (
     ensure_lavacli_available,
     convert_to_seconds,
+    flavor_job_ctx,
     load_job_ctx,
     generate_job,
     generate_split_files,
@@ -51,6 +52,9 @@ def cmd_smoke(ctx, system_config):
     with tempfile.TemporaryDirectory() as td:
         job_ctx = load_job_ctx(ctx.job_path + "/boards/" + ctx.hostname + ".yaml")
         job_ctx["tags"] = [ctx.hostname]
+        # The plain build, no flavor: but job-base needs the same
+        # context as every job (the kernel-log check's known warnings).
+        flavor_job_ctx(ctx, "", job_ctx)
         testname = "job-smoke-tests"
         filename = ctx.job_path + "/" + testname + ".jinja2"
         job = generate_job(ctx.job_path, filename, job_ctx)
