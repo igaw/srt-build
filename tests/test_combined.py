@@ -69,6 +69,16 @@ def test_tests_in_order_each_checked(monkeypatch, board, flavor):
         assert rest and rest[0] == f"kernel-log-{k}", kinds
 
 
+def test_settle_reports_a_case(monkeypatch):
+    # without a case LAVA makes no suite for it, and jobs report flags
+    # it as a definition without results (job 795)
+    job, _ = _build(monkeypatch, "c2d", "rt")
+    (settle,) = [d for d in _definitions(job) if d["name"] == "settle"]
+    assert any(
+        "lava-test-case settle" in s for s in settle["repository"]["run"]["steps"]
+    )
+
+
 @pytest.mark.parametrize("flavor", COMBINED)
 @pytest.mark.parametrize("board", ["bbb", "c2d", "rpi3-32", "rpi3-64"])
 def test_definition_names_unique(monkeypatch, board, flavor):

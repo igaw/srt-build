@@ -72,7 +72,14 @@ def _settle():
                             "name": SETTLE,
                             "description": "let the boot settle before measuring",
                         },
-                        "run": {"steps": [f"sleep {SETTLE_SECONDS}"]},
+                        # A case, so the definition has a suite of its
+                        # own: jobs report flags one without results.
+                        "run": {
+                            "steps": [
+                                f"sleep {SETTLE_SECONDS}",
+                                "lava-test-case settle --result pass",
+                            ]
+                        },
                     },
                 }
             ],
