@@ -230,3 +230,135 @@ def test_single_test_job_keeps_its_test():
         )
         == {}
     )
+
+
+def test_workload_names():
+    from srt_build.metrics import workload
+
+    assert workload("") == "idle"
+    assert workload("hackbench") == "hackbench"
+    assert workload("taskset -c 0 hackbench") == "hackbench"
+    assert workload("stress-ng -v --access 0") == "stress-ng-access"
+    assert (
+        workload("stress-ng -v --oom-avoid --class io --seq 0 -t 15 -x a,b")
+        == "stress-ng-class-io"
+    )
+    assert (
+        workload(
+            "stress-ng --oom-avoid --temp-path /tmp --cpu 1 --vm 1 --vm-bytes 10%"
+            " --hdd 1 --hdd-bytes 32M --sock 1 --pipe 1 --switch 1 --fork 1"
+        )
+        == "stress-ng-mix"
+    )
+
+
+def test_workloads_of_all_templates(monkeypatch):
+    """Every template's BACKGROUND_CMD gets a workload name: the
+    stress-ng jobs their stressor or class, no rt test "idle" by
+    accident."""
+    import os
+    from types import SimpleNamespace
+
+    import yaml
+
+    from srt_build import config
+    from srt_build.helpers import (
+        flavor_job_ctx,
+        generate_job,
+        job_templates,
+        load_job_ctx,
+    )
+    from srt_build.metrics import definition_workloads
+
+    root = os.path.join(os.path.dirname(__file__), "..")
+    with open(os.path.join(root, "config.yml")) as f:
+        cfg = yaml.safe_load(f)
+    monkeypatch.setattr(config, "flavors", cfg.get("flavors") or {})
+    jobs = os.path.join(root, "jobs")
+    board = "rpi3-64"
+    ctx = SimpleNamespace(**{"hostname": board, **cfg["machine_config"][board]})
+    job_ctx = load_job_ctx(os.path.join(jobs, "boards", board + ".yaml"))
+    job_ctx["tags"] = [board]
+    found = {}
+    for fl in ("rt", "rt-isolcpus"):
+        flavor_job_ctx(ctx, fl, job_ctx)
+        for sub in sorted(os.listdir(os.path.join(jobs, fl))):
+            for path, c in job_templates(os.path.join(jobs, fl, sub), job_ctx):
+                job = {"definition": generate_job(jobs, path, c)}
+                name = yaml.safe_load(job["definition"])["job_name"]
+                found[name] = definition_workloads(job)
+    assert found["cyclictest"] == {"cyclictest": "hackbench"}
+    assert found["cyclictest rt-isolcpus"] == {"cyclictest": "hackbench"}
+    assert found["rtla-timerlat-stress"] == {"rtla-timerlat-stress": "stress-ng-mix"}
+    assert found["stress-ng-access"] == {"rtla-timerlat": "stress-ng-access"}
+    assert found["stress-ng-io"] == {"rtla-timerlat": "stress-ng-class-io"}
+    assert found["isolcpus rt-isolcpus"] == {}
+    for name, wl in found.items():
+        if name.startswith("stress-ng-"):
+            # stress-ng-<stressor>, or stress-ng-class-<class> of the
+            # class job stress-ng-<class>
+            what = name[len("stress-ng-") :]
+            assert list(wl.values()) in (
+                [f"stress-ng-{what}"],
+                [f"stress-ng-class-{what}"],
+            ), (name, wl)
+
+
+def test_samples_carry_workload():
+    """A combined job's tests each get their definition's workload; a
+    job of one test its one definition's."""
+    from srt_build.report import summarize_job
+
+    definition = (
+        DEFINITION
+        + """
+actions:
+- test:
+    definitions:
+    - name: rtla-timerlat
+      parameters: {BACKGROUND_CMD: ""}
+- test:
+    definitions:
+    - name: kernel-log
+- test:
+    definitions:
+    - name: cyclictest
+      parameters: {BACKGROUND_CMD: "taskset -c 0 hackbench"}
+"""
+    )
+    suites = [
+        {"id": 1, "name": "lava"},
+        {"id": 3, "name": "0_rtla-timerlat"},
+        {"id": 4, "name": "1_kernel-log"},
+        {"id": 5, "name": "2_cyclictest"},
+    ]
+    tests = [
+        {"name": "u0-max-latency", "result": "pass", "suite": 3, "measurement": "56"},
+        {"name": "t0-max-latency", "result": "pass", "suite": 5, "measurement": "155"},
+    ]
+    job = _job(description="rt-tests", definition=definition)
+    s = summarize_job(job, tests, suites)
+    got = {
+        x["metric"]["test"]: x["metric"].get("workload")
+        for x in job_samples(job, tests, s)
+        if x["metric"]["__name__"] == "srt_latency_us"
+    }
+    assert got == {"rtla-timerlat": "idle", "cyclictest": "hackbench"}
+
+    one = (
+        DEFINITION
+        + """
+actions:
+- test:
+    definitions:
+    - name: cyclictest
+      parameters: {BACKGROUND_CMD: "hackbench"}
+"""
+    )
+    job = _job(definition=one)
+    tests = [{"name": "t0-max-latency", "result": "pass", "measurement": "15"}]
+    samples = job_samples(job, tests, _summary())
+    lat = [x for x in samples if x["metric"]["__name__"] == "srt_latency_us"]
+    assert lat[0]["metric"]["workload"] == "hackbench"
+    ok = [x for x in samples if x["metric"]["__name__"] == "srt_job_ok"]
+    assert "workload" not in ok[0]["metric"]

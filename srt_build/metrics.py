@@ -5,7 +5,8 @@ artifacts), so they can be tested without LAVA or VictoriaMetrics.
 
 Every sample of a job carries the job's end time from LAVA, not the
 board's clock (the boards have no RTC; their rt-tests JSON says
-October), and the labels board, flavor, test, kernel and job.
+October), and the labels board, flavor, test, kernel and job. A
+test's results also carry its workload (see workload()).
 VictoriaMetrics' /api/v1/import takes such old timestamps, so older
 rounds can be exported later the same way.
 
@@ -68,6 +69,57 @@ def job_metadata(job):
         return {}
     md = definition.get("metadata") if isinstance(definition, dict) else None
     return md if isinstance(md, dict) else {}
+
+
+# stress-ng options with a number that aren't stressors.
+_SNG_NOT_STRESSORS = {"seq", "timeout", "t", "backoff", "ionice-level", "sched-prio"}
+
+
+def workload(cmd):
+    """The workload a test ran under, from its BACKGROUND_CMD.
+
+    "idle" (none), "hackbench", "stress-ng-class-<class>" (--class),
+    "stress-ng-<stressor>" (one stressor) or "stress-ng-mix" (several:
+    rtla-timerlat-stress's fixed mix), else the command's name. Pinning
+    it to CPUs (taskset -c) doesn't change what it is.
+    """
+    cmd = re.sub(r"^taskset -c \S+\s+", "", (cmd or "").strip())
+    words = cmd.split()
+    if not words:
+        return "idle"
+    name = words[0].rsplit("/", 1)[-1]
+    if name != "stress-ng":
+        return name
+    m = re.search(r"--class[= ](\S+)", cmd)
+    if m:
+        return f"stress-ng-class-{m.group(1)}"
+    stressors = [
+        s
+        for s in re.findall(r"--([a-z][a-z0-9-]*)[= ](\d+)(?=\s|$)", cmd)
+        if s[0] not in _SNG_NOT_STRESSORS
+    ]
+    if len(stressors) == 1:
+        return f"stress-ng-{stressors[0][0]}"
+    return "stress-ng-mix"
+
+
+def definition_workloads(job):
+    """{test definition name: workload} of the job's definitions that
+    take a BACKGROUND_CMD. A combined job's suites are named after
+    their definition, so this gives each of its tests its own."""
+    try:
+        definition = yaml.safe_load(job.get("definition") or "") or {}
+    except yaml.YAMLError:
+        return {}
+    out = {}
+    for action in (
+        definition.get("actions") or [] if isinstance(definition, dict) else []
+    ):
+        for d in ((action or {}).get("test") or {}).get("definitions") or []:
+            params = d.get("parameters") or {}
+            if "BACKGROUND_CMD" in params:
+                out[d.get("name")] = workload(str(params["BACKGROUND_CMD"]))
+    return out
 
 
 def job_labels(job, summary):
@@ -135,9 +187,17 @@ def job_samples(job, tests, summary, artifacts=None):
     # each test keeps its own series, as with a job per test.
     suite_tests = getattr(summary, "suite_tests", None) or {}
 
+    workloads = definition_workloads(job)
+    # A job of one test: the workload of its one definition with a
+    # BACKGROUND_CMD (none: isolcpus check, smoke tests).
+    single = list(workloads.values()) if len(workloads) == 1 else []
+
     def test_labels(suite):
         name = suite_tests.get(suite)
-        return {**labels, "test": name} if name else labels
+        if name:
+            wl = workloads.get(name)
+            return {**labels, "test": name, **({"workload": wl} if wl else {})}
+        return {**labels, "workload": single[0]} if single else labels
 
     for t in tests:
         name = t.get("name", "")
