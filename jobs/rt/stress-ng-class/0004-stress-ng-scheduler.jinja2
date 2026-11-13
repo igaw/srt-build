@@ -12,7 +12,7 @@ definitions:
   parameters:
     DURATION: "15m"
     PRIORITY: "f:98"
-    BACKGROUND_CMD: "stress-ng -v --oom-avoid --class scheduler --seq 0 -t 15 -x softlockup,cpu-sched,schedmix,cyclic,hrtimers,mutex,schedpolicy"
+    BACKGROUND_CMD: "stress-ng -v --oom-avoid --class scheduler --seq 0 -t 15 -x softlockup,cpu-sched,schedmix,cyclic,hrtimers,mutex,schedpolicy,fifo,tee"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
 {% endblock tests -%}

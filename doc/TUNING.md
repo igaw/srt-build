@@ -264,10 +264,27 @@ stress round (`--testsuites stress-ng-class`, below) is for coverage.
 
 Besides the smoke tests, `--testsuites stress-ng-class` runs one job
 per stress-ng class (network, io, os, scheduler, memory, pipe): rtla
-timerlat on every CPU for 15 minutes (os: 1 hour) while `stress-ng
---class <class> --seq 0` runs each of the class's stressors in turn,
-one instance per CPU. The test definition restarts stress-ng whenever
-it finishes, so the load lasts as long as the measurement.
+timerlat on every CPU for 15 minutes (os: 45 minutes) while
+`stress-ng --class <class> --seq 0 -t 15` runs each of the class's
+stressors in turn for 15 s, one instance per CPU. The test definition
+restarts stress-ng whenever it finishes, so the load lasts as long as
+the measurement.
+
+**Every stressor runs in one job only.** stress-ng's classes overlap:
+os (271 stressors in 0.22.01) contains 40 of scheduler's 45, 21 of
+network's 23, 9 of io's 10, 20 of memory's 61 and all 8 of pipe's;
+scheduler and memory share fifo, tee, pipe and pipeherd with pipe. So
+each stressor runs in its most specific class: the os job leaves out
+everything the other five classes run (`-x`, 106 names with the
+exclusions below), scheduler leaves out fifo and tee, memory pipe and
+pipeherd. That cut the os job from 259 stressors (65 minutes, more
+than its 1 hour measurement, so the last ones never ran) to 165 (41
+minutes, inside its 45). Before, io, network and pipe ran without
+`-t`, i.e. 60 s per stressor with `--seq`: network's 23 stressors
+needed 23 minutes, and its last 8 never ran in the 15 minute job.
+The lists come from stress-ng 0.22.01's sources (each stressor's
+`.classifier`) and match the rootfs's `stress-ng --class <class>?`;
+check them when the rootfs gets a new stress-ng.
 `--testsuites stress-ng` has one job per stressor (373); it is for
 narrowing down a class result, not for rounds.
 
