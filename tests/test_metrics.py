@@ -197,7 +197,7 @@ def test_combined_job_samples_per_test():
         {"name": "kernel-log-clean", "result": "pass", "suite": 4, "measurement": "1"},
         {"name": "test-attachment", "result": "pass", "suite": 3, "metadata": upload},
     ]
-    job = _job(description="combined rt")
+    job = _job(description="rt-tests")
     s = summarize_job(job, tests, suites)
     assert s.per_test == [("rtla-timerlat", 256.0), ("cyclictest", 155.0)]
     doc = {"thread": {"0": {"histogram": {"10": 5}, "count": 5}}}

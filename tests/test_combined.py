@@ -115,7 +115,13 @@ def test_rt_durations_and_timeouts(monkeypatch):
     # bbb's template allows 7 min for deploy and boot; then 3 x 5 min,
     # 8 x 1 min plus slack per test
     assert t["job"]["minutes"] > 7 + 15 + 8
-    assert job["metadata"]["srt.test"] == "combined"
+    assert job["metadata"]["srt.test"] == "rt-tests"
+    assert job["job_name"] == "rt-tests"
+
+
+def test_job_name_keeps_the_flavor_suffix(monkeypatch):
+    job, _ = _build(monkeypatch, "c2d", "rt-isolcpus")
+    assert job["job_name"] == "rt-tests rt-isolcpus"
 
 
 def test_fair_server_back_on_after_osnoise(monkeypatch):

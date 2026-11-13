@@ -18,7 +18,7 @@ setting or calling something a regression.
    and submits; `--skip-build` reuses the installed kernels when only
    job templates, `config.yml` flavors or test-definitions changed, not
    `configs/`. rt and rt-isolcpus run their tests in one boot (one
-   "combined" job, report rows per test); rerun single tests with
+   "rt-tests" job, report rows per test); rerun single tests with
    `--flavors rt --tests <test>`, or everything a boot per test with
    `--split`.
 2. Check the jobs carry what you expect before they run: the job

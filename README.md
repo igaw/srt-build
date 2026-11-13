@@ -10,7 +10,8 @@ tooling to build RT test kernels with Lava.
     srt-build lava bbb --testsuites stress-ng-class   # the stress round
 
 A flavor with a `combined` list in `config.yml` (rt, rt-isolcpus) runs
-those tests in one job, one boot, in that order; its other tests
+those tests in one job ("rt-tests", "rt-tests rt-isolcpus"), one
+boot, in that order; its other tests
 (pi-stress) and all other flavors get a job per test. Each test of a
 combined job stays a LAVA test suite of its own, so `jobs report`
 lists it in a row under the job and `jobs export` sends its results

@@ -16,6 +16,9 @@ import yaml
 
 from .helpers import convert_to_seconds, generate_job
 
+# The job's name and test label: it runs the flavor's rt tests.
+JOB_TEST = "rt-tests"
+
 # Before the first test: the end of the boot (systemd, NFS, the
 # shell's own setup) is no load to measure under.
 SETTLE = "settle"
@@ -204,8 +207,10 @@ def build(rendered, tests, flavor, duration=None):
                 fair_server_off = False
     _unique_names(actions)
     job["actions"] = actions
-    job["job_name"] = f"combined {flavor}"
-    job["metadata"]["srt.test"] = "combined"
+    # "rt-tests", with the flavor where the flavor's own jobs name it
+    # ("cyclictest rt-isolcpus" -> "rt-tests rt-isolcpus")
+    job["job_name"] = " ".join([JOB_TEST] + first["job_name"].split()[1:])
+    job["metadata"]["srt.test"] = JOB_TEST
     t = job["timeouts"]
     # The template's job timeout covers deploy and boot (with retries).
     t["job"] = {"minutes": int(t["job"]["minutes"]) + -(-test_seconds // 60)}
