@@ -1,18 +1,13 @@
 {% extends 'job-base.jinja2' %}
+{% import 'test-definition.jinja2' as td with context %}
 
 {% set job_name = 'stress-ng-os' %}
 
 {% block tests %}
 definitions:
-- repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
-  from: git
-  branch: {{ test_definitions_branch|default('master') }}
-  path: automated/linux/rtla/rtla-timerlat.yaml
-  name: rtla-timerlat
-  parameters:
-    DURATION: "45m"
-    RT_PRIORITY: "f:98"
-    BACKGROUND_CMD: "stress-ng -v --oom-avoid --class os --seq 0 -t 15 -x bigheap,brk,stack,env,softlockup,cpu-sched,schedmix,cyclic,hrtimers,mutex,schedpolicy,acct,led,procfs,loop,mmapmany,mmaphuge,mmapcow,mmap,dev-shm,shm,copy-file,dirmany,mlock,mlockmany,open,memhotplug,aio,aiol,bad-altstack,bpf,clone,daemon,dccp,epoll,epollmany,eth-sniff,exec,exit-group,fifo,flipflop,fork,forkheavy,full,futex,hdd,icmp-flood,io-uring,kill,loadavg,malloc,memfd,min-nanosleep,mincore,mmapfork,mq,msg,mtx,nanosleep,nice,null,numa,numacopy,oom-pipe,ovpn,ping-sock,pipe,pipeherd,poll,prio-inv,pseek,pthread,race-sched,rawpkt,rawsock,rawudp,readahead,remap,resched,resources,revio,ring-pipe,rmap,seek,sem,sem-sysv,sendfile,session,sigurg,sleep,sock,sockabuse,sockdiag,sockfd,sockmany,sockpair,spawn,splice,switch,sync-file,tee,tmpfs,tun,udp,udp-flood,varyload,vfork,vforkmany,vm,vm-addr,vm-rw,vm-segv,vm-splice,wait,workload,yield,zero,zombie"
-    ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
-    ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{{ td.definition('rtla/rtla-timerlat.yaml', 'rtla-timerlat', {
+    'DURATION': '45m',
+    'RT_PRIORITY': 'f:98',
+    'BACKGROUND_CMD': 'stress-ng -v --oom-avoid --class os --seq 0 -t 15 -x bigheap,brk,stack,env,softlockup,cpu-sched,schedmix,cyclic,hrtimers,mutex,schedpolicy,acct,led,procfs,loop,mmapmany,mmaphuge,mmapcow,mmap,dev-shm,shm,copy-file,dirmany,mlock,mlockmany,open,memhotplug,aio,aiol,bad-altstack,bpf,clone,daemon,dccp,epoll,epollmany,eth-sniff,exec,exit-group,fifo,flipflop,fork,forkheavy,full,futex,hdd,icmp-flood,io-uring,kill,loadavg,malloc,memfd,min-nanosleep,mincore,mmapfork,mq,msg,mtx,nanosleep,nice,null,numa,numacopy,oom-pipe,ovpn,ping-sock,pipe,pipeherd,poll,prio-inv,pseek,pthread,race-sched,rawpkt,rawsock,rawudp,readahead,remap,resched,resources,revio,ring-pipe,rmap,seek,sem,sem-sysv,sendfile,session,sigurg,sleep,sock,sockabuse,sockdiag,sockfd,sockmany,sockpair,spawn,splice,switch,sync-file,tee,tmpfs,tun,udp,udp-flood,varyload,vfork,vforkmany,vm,vm-addr,vm-rw,vm-segv,vm-splice,wait,workload,yield,zero,zombie',
+}) }}
 {% endblock tests -%}

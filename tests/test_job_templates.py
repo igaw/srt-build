@@ -232,3 +232,18 @@ def test_job_timeout_covers_boot_and_test(duration, base, want):
     _bump_job_timeouts(job, duration)
     assert job["timeouts"]["job"]["minutes"] == want
     assert job["timeouts"]["action"]["minutes"] * 60 >= min(duration + 120, 300)
+
+
+def test_definitions_through_macro():
+    """Test definitions from test-definitions come from
+    test-definition.jinja2's macro, which adds what every one of them
+    takes (repository, branch, Artifactorial): one place to change."""
+    for root, _, files in os.walk(JOBS):
+        for name in files:
+            path = os.path.join(root, name)
+            if not name.endswith(".jinja2") or name == "test-definition.jinja2":
+                continue
+            with open(path) as f:
+                text = f.read()
+            assert "test_definitions_url" not in text, path
+            assert "ARTIFACTORIAL" not in text, path

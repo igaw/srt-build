@@ -1,0 +1,25 @@
+{#
+  A test definition from test-definitions (the board's
+  test_definitions_url and test_definitions_branch), with the
+  Artifactorial upload settings every one of them takes. path is
+  relative to automated/linux/, params are the test's own parameters, in
+  order; every value is passed as a string.
+
+  {% import 'test-definition.jinja2' as td with context %}
+  {{ td.definition('cyclictest/cyclictest.yaml', 'cyclictest', {
+      'DURATION': cyclictest.duration|default('1m'),
+  }) }}
+#}
+{% macro definition(path, name, params) %}
+- repository: {{ test_definitions_url|default('https://github.com/Linaro/test-definitions.git') }}
+  from: git
+  branch: {{ test_definitions_branch|default('master') }}
+  path: automated/linux/{{ path }}
+  name: {{ name }}
+  parameters:
+{% for key, value in params.items() %}
+    {{ key }}: "{{ value|string|replace('\\', '\\\\')|replace('"', '\\"') }}"
+{% endfor %}
+    ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
+    ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
+{% endmacro %}
