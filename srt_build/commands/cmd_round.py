@@ -1,7 +1,9 @@
 """Round commands - a test round as one unit (doc/ROUNDS.md).
 
   srt-build round start [--test] [--dry-run]  submit a round (kernel tree)
+  srt-build round status [N] / round wait [N] follow it
   srt-build round rerun N JOB               replace a job of it
+  srt-build round compare A B               line up two rounds
   srt-build round import 12 --ids 912-965   backfill a round that ran
   srt-build round report [N]                fetch it into the archive, report
   srt-build round export [N] [--dry-run]    send it to VictoriaMetrics
@@ -33,16 +35,20 @@ from ..archive import (
 
 def add_parser(subparser):
     from . import (
+        cmd_round_compare,
         cmd_round_drop,
         cmd_round_export,
         cmd_round_report,
         cmd_round_start,
+        cmd_round_status,
     )
 
     p = subparser.add_parser("round", help="test rounds and the round archive")
     sub = p.add_subparsers(help="round commands", dest="round_cmd", required=True)
     cmd_round_start.add_parsers(sub)
+    cmd_round_status.add_parsers(sub)
     cmd_round_report.add_parsers(sub)
+    cmd_round_compare.add_parsers(sub)
     cmd_round_export.add_parsers(sub)
     cmd_round_drop.add_parsers(sub)
 
