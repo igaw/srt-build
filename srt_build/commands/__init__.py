@@ -14,6 +14,7 @@ from . import (
     cmd_jobs_cancel,
     cmd_kexec,
     cmd_all,
+    cmd_round,
 )
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "cmd_jobs_cancel",
     "cmd_kexec",
     "cmd_all",
+    "cmd_round",
 ]

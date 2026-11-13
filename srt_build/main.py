@@ -19,6 +19,7 @@ from .commands import (
     cmd_jobs,
     cmd_kexec,
     cmd_all,
+    cmd_round,
 )
 
 
@@ -44,6 +45,7 @@ def create_parser():
     cmd_jobs.add_parser(subparser)
     cmd_kexec.add_parser(subparser)
     cmd_all.add_parser(subparser)
+    cmd_round.add_parser(subparser)
 
     return parser
 
@@ -79,6 +81,12 @@ def main():  # noqa: C901 (command dispatch, one branch per command)
         "export",
         "dashboard",
     ):
+        if args.debug:
+            logging.basicConfig(level=logging.DEBUG)
+        args.func(args, system_config, machine_config)
+        return
+    # So do the round commands.
+    if getattr(args, "round_cmd", None):
         if args.debug:
             logging.basicConfig(level=logging.DEBUG)
         args.func(args, system_config, machine_config)
