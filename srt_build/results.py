@@ -12,33 +12,19 @@ from .helpers import load_job_ctx
 
 
 def handle_rt_results(test, job_ctx, rt_suites):
-    """Handle RT-specific test results with latency checking."""
+    """Print an RT test result as LAVA reported it.
+
+    No latency limit here: a max latency depends on the kernel, its
+    config, the test and the workload, not on the board alone. Whether
+    a latency is out of line is for `jobs report` to judge.
+    """
     try:
         measurement = float(test["measurement"])
     except Exception as exc:
         debug(f"Could not parse measurement: {exc}")
         measurement = 0.0
 
-    max_latency = -1
-    name = test["suite"].split("_")[-1]
-    name = name.replace("-", "_")
-    if job_ctx and job_ctx.get(name) and "max_latency" in job_ctx[name]:
-        max_latency = int(job_ctx[name]["max_latency"])
-
-    passed = test["result"] == "pass"
-
-    # max_latency stays -1 when the job context sets no limit: no check.
-    if (
-        test["name"].endswith("max-latency")
-        and max_latency >= 0
-        and measurement >= max_latency
-    ):
-        passed = False
-
-    if passed:
-        result = bcolors.OKGREEN + "pass" + bcolors.ENDC
-    else:
-        result = bcolors.FAIL + "fail" + bcolors.ENDC
+    result = get_color_result(test["result"] == "pass")
     print(
         f'  {test["job"]:5} {test["suite"]:20} {test["name"]:20}: '
         f"{result} {measurement:>10.2f}"
