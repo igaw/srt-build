@@ -4,26 +4,32 @@
 files (grafana_dashboard_files on monitor). Edit this and rerun, not
 the JSON.
 
-  rt-tests.json        "RT tests": the overview. One row per board, in
-                       it one trend per test (max latency of each job,
-                       a line per flavor), and what needs a look
-                       (problems). A click on a trend opens:
-  rt-test-detail.json  "RT test detail": one board, flavor and test.
-                       Trends per thread and percentiles, the histograms
-                       over time, one job's histogram and threads, the
-                       jobs and kernels.
+  rt-tests.json        "RT tests": the overview, by round. One row per
+                       board, in it one trend per test with the release
+                       rounds on the x axis (max latency of each round,
+                       a line per flavor and workload), what needs a
+                       look (problems), and two rounds side by side
+                       (release or test rounds). A click on a trend
+                       opens:
+  rt-test-detail.json  "RT test detail": one board, flavor and test,
+                       over time. Trends per thread and percentiles, the
+                       histograms over time, one job's histogram and
+                       threads, the jobs and kernels.
 
-The overview also lines the rounds up (`round export` labels the
-samples with round and round_kind): per board and test a Trend panel
-with the round on the x axis, and two rounds side by side. Grafana's
-Trend panel needs Grafana 10 or later. The round_kind variable
-(release by default) keeps test rounds out unless chosen; samples
-without the label (`jobs export`) always show in the time trends.
+`round export` labels the samples with round and round_kind. The round
+trends use Grafana's Trend panel (Grafana 10 or later): the round, a
+label, becomes the x value, so only release rounds (numbers) go there;
+test rounds (t3) are compared in the two-round bars. The round_kind
+variable (release by default) keeps test rounds out of everything else
+unless chosen; samples without the label (jobs outside the archive)
+show in the time-based detail dashboard. The workload variable picks
+the background load (idle, hackbench, stress-ng-class-<c>, ...).
 
 Every job is a handful of samples at the job's end time, not a
-continuous series: trends take each job's value per interval
-(last_over_time over $__interval) and join the points; tables take the
-largest value over the dashboard's time range.
+continuous series: the detail trends take each job's value per interval
+(last_over_time over $__interval) and join the points; round trends
+and tables take the largest value over the dashboard's time range (a
+year on the overview).
 """
 
 DS = {"type": "prometheus", "uid": "victoriametrics"}
@@ -33,16 +39,31 @@ DETAIL_UID = "rt-test-detail"
 # Samples of the chosen round kinds, and those without round (jobs
 # export): "" matches a missing label.
 KIND = 'round_kind=~"$round_kind|"'
+# The background load of a test's samples (results only; the job-level
+# series have no workload). All is .*, which also matches a missing one.
+WL = 'workload=~"$workload"'
 # The overview's variables, as label matchers.
-SEL = 'board=~"$board", flavor=~"$flavor", test=~"$test", kernel=~"$kernel", ' + KIND
+SEL = (
+    'board=~"$board", flavor=~"$flavor", test=~"$test", kernel=~"$kernel", '
+    + WL
+    + ", "
+    + KIND
+)
 # For the job counts and problems: all tests, also those without
 # latencies (smoke-tests, isolcpus, pi-stress), which $test leaves out.
 JOBS = 'board=~"$board", flavor=~"$flavor", kernel=~"$kernel", ' + KIND
 BY = "board, flavor, test"
 # The detail dashboard's: one board, flavor and test.
-ONE = 'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel", ' + KIND
+ONE = (
+    'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel", '
+    + WL
+    + ", "
+    + KIND
+)
 # Round samples only, of the chosen kinds.
 ROUNDS = 'round_kind=~"$round_kind"'
+# The round trends: release rounds only, their round is a number.
+RELEASE = 'round_kind="release"'
 
 PROBLEM_KINDS = (
     "health: job not Complete; failed: failed test cases (e.g. "
@@ -337,13 +358,14 @@ class Dashboard:
         )
 
     def round_bars(self, title, rounds, sel, x, w, h, desc=""):
-        """Two rounds side by side: a bar per board and test for each."""
+        """Two rounds side by side: a bar per board, test and workload
+        for each."""
         targets = []
         for i, rnd in enumerate(rounds):
             expr = (
-                "label_join(max by (board, test) (max_over_time(srt_latency_us"
-                f'{{stat="max", round="{rnd}", {sel}}}[$__range])), '
-                '"key", " ", "board", "test")'
+                "label_join(max by (board, test, workload) (max_over_time("
+                f'srt_latency_us{{stat="max", round="{rnd}", {sel}}}[$__range])), '
+                '"key", " ", "board", "test", "workload")'
             )
             targets.append(
                 self._target(expr, rnd, instant=True, fmt="table", ref=chr(65 + i))
@@ -449,6 +471,15 @@ def _round_kind_var():
     }
 
 
+def _workload_var(sel):
+    """All by default, as .*: it also matches samples without a workload
+    (Grafana's own All lists the values, which a missing label fails)."""
+    v = _var("workload", f"label_values(srt_latency_us{{{sel}}}, workload)")
+    v["allValue"] = ".*"
+    v["current"] = {"text": "All", "value": "$__all"}
+    return v
+
+
 def _var(name, query, multi=True, include_all=True, sort=1):
     """sort: 1 alphabetical, 4 numerical descending (latest job first)."""
     return {
@@ -465,7 +496,9 @@ def _var(name, query, multi=True, include_all=True, sort=1):
     }
 
 
-def _dashboard(uid, title, description, lava_url, panels, variables, links):
+def _dashboard(
+    uid, title, description, lava_url, panels, variables, links, since="now-90d"
+):
     return {
         "uid": uid,
         "title": title,
@@ -473,7 +506,7 @@ def _dashboard(uid, title, description, lava_url, panels, variables, links):
         "timezone": "browser",
         "editable": False,
         "refresh": "",
-        "time": {"from": "now-90d", "to": "now"},
+        "time": {"from": since, "to": "now"},
         "schemaVersion": 39,
         "version": 1,
         "description": description + " Generated by `srt-build jobs dashboard` "
@@ -547,55 +580,38 @@ def build_overview(lava_url):
     )
     d.y += 6
 
-    # One row per board, one trend per test in it.
+    # One row per board, one round trend per test in it.
     d.row("$board", repeat="board")
-    one_test = (
-        'board="$board", test="$test", flavor=~"$flavor", kernel=~"$kernel", ' + KIND
+    by_round = (
+        'board="$board", test="$test", flavor=~"$flavor", kernel=~"$kernel", '
+        + WL
+        + ", "
+        + RELEASE
     )
-    p = d.trend(
+    p = d.round_trend(
         "$test",
-        [(f"max by (flavor) ({_latency('max', one_test)})", "{{flavor}}")],
+        "label_join(max by (round, flavor, workload) (max_over_time("
+        f'srt_latency_us{{stat="max", {by_round}}}[$__range])), '
+        '"series", " ", "flavor", "workload")',
+        "series",
         0,
         4,
         6,
-        desc="Max latency of each job (largest of its threads), a line per "
-        "flavor; log scale. Click a point or the title's link for the details.",
-        links=[
-            {
-                "title": "$test on $board, ${__field.labels.flavor}, in detail",
-                "url": detail_url("$board", "${__field.labels.flavor}", "$test"),
-            }
-        ],
+        desc="Max latency of each release round (largest of its jobs and "
+        "threads), the round on the x axis, a line per flavor and workload; "
+        "log scale. The title's link opens the test over time, in detail.",
         repeat="test",
         repeatDirection="h",
         maxPerRow=6,
     )
     p["links"] = [{"title": "Details", "url": detail_url("$board", None, "$test")}]
     d.y += 6
-    by_round = (
-        'board="$board", test="$test", flavor=~"$flavor", kernel=~"$kernel", ' + ROUNDS
-    )
-    d.round_trend(
-        "$test by round",
-        f'max by (round, flavor) (max_over_time(srt_latency_us{{stat="max", '
-        f"{by_round}}}[$__range]))",
-        "flavor",
-        0,
-        4,
-        6,
-        desc="Max latency of each round (largest of its jobs and threads), the "
-        "round on the x axis, a line per flavor; log scale. Release rounds.",
-        repeat="test",
-        repeatDirection="h",
-        maxPerRow=6,
-    )
-    d.y += 6
 
     d.row("Two rounds")
     d.round_bars(
         "Round $round_a and $round_b",
         ["$round_a", "$round_b"],
-        'flavor=~"$flavor", board=~"$board", test=~"$test", ' + ROUNDS,
+        'flavor=~"$flavor", board=~"$board", test=~"$test", ' + WL + ", " + ROUNDS,
         0,
         24,
         12,
@@ -607,8 +623,9 @@ def build_overview(lava_url):
     return _dashboard(
         OVERVIEW_UID,
         "RT tests",
-        "PREEMPT_RT test rounds in LAVA, from `srt-build jobs export`: a trend "
-        "per board and test; click one for the details.",
+        "PREEMPT_RT test rounds in LAVA, from `srt-build round export`: per "
+        "board and test a trend over the release rounds; its link opens the "
+        "details.",
         lava_url,
         d.panels,
         [
@@ -623,6 +640,7 @@ def build_overview(lava_url):
                 "kernel",
                 'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor"}, kernel)',
             ),
+            _workload_var('board=~"$board", flavor=~"$flavor", test=~"$test"'),
             _round_kind_var(),
             _var(
                 "round_a",
@@ -640,6 +658,7 @@ def build_overview(lava_url):
             ),
         ],
         [{"title": "RT test detail", "url": f"/d/{DETAIL_UID}", "type": "link"}],
+        since="now-1y",
     )
 
 
@@ -784,6 +803,7 @@ def build_detail(lava_url):
                 False,
             ),
             _var("kernel", f"label_values(srt_job_ok{{{sel}}}, kernel)"),
+            _workload_var(sel),
             _round_kind_var(),
             _var(
                 "job",
