@@ -122,7 +122,8 @@ before the session ends: the board's root file system is gone with it.
 
 [doc/TUNING.md](doc/TUNING.md) explains the boards' kernel configuration,
 command line and runtime settings, the quirks found on the way and what
-didn't help, with the LAVA jobs that showed it.
+didn't help, with the LAVA jobs that showed it. What srt-build itself
+still lacks is in [doc/TODO.md](doc/TODO.md).
 
 ## Checking kernel configs
 
