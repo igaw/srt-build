@@ -1,0 +1,19 @@
+{% extends 'job-base.jinja2' %}
+{% import 'test-definition.jinja2' as td with context %}
+
+{% set job_name = 'cyclictest-idle' %}
+
+{# cyclictest without a workload: the baseline the runs under load are
+   compared with (workload "idle" in the metrics). #}
+{% block tests %}
+definitions:
+{{ td.definition('cyclictest/cyclictest.yaml', 'cyclictest-idle', {
+    'AFFINITY': cyclictest.affinity|default('0'),
+    'BACKGROUND_CMD': '',
+    'DURATION': cyclictest.duration|default('1m'),
+    'HISTOGRAM': cyclictest.histogram|default(''),
+    'INTERVAL': cyclictest.interval|default('1000'),
+    'RT_PRIORITY': cyclictest.priority|default('98'),
+    'THREADS': cyclictest.threads|default('1'),
+}) }}
+{% endblock tests -%}

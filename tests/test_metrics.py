@@ -293,6 +293,8 @@ def test_workloads_of_all_templates(monkeypatch):
     assert found["stress-ng-access"] == {"rtla-timerlat": "stress-ng-access"}
     assert found["stress-ng-io"] == {"rtla-timerlat": "stress-ng-class-io"}
     assert found["isolcpus rt-isolcpus"] == {}
+    assert found["rtla-timerlat-idle"] == {"rtla-timerlat-idle": "idle"}
+    assert found["cyclictest-idle rt-isolcpus"] == {"cyclictest-idle": "idle"}
     for name, wl in found.items():
         if name.startswith("stress-ng-"):
             # stress-ng-<stressor>, or stress-ng-class-<class> of the

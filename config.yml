@@ -58,12 +58,15 @@ flavors:
     fair_server_off:
       "v6.12.": [rtla-osnoise]
     # The default round: all tests in one boot, in this order (lava
-    # --split: one boot per test). rtla first and for 5 minutes, the
+    # --split: one boot per test). First the idle baseline (timerlat
+    # and cyclictest without a workload), then rtla for 5 minutes, the
     # rt-tests for 1, timerlat under the fixed stress mix last.
     # pi-stress keeps a boot of its own: it needs rcutree.kthread_prio
     # and takes the board down when it goes wrong (round 9).
     combined:
       - settle
+      - rtla-timerlat-idle: 5m
+      - cyclictest-idle
       - rtla-timerlat: 5m
       - rtla-osnoise: 5m
       - cyclictest
@@ -90,6 +93,8 @@ flavors:
     combined:
       - isolcpus rt-isolcpus
       - settle
+      - rtla-timerlat-idle rt-isolcpus: 5m
+      - cyclictest-idle rt-isolcpus
       - rtla-timerlat rt-isolcpus: 5m
       - rtla-osnoise rt-isolcpus: 5m
       - cyclictest rt-isolcpus
@@ -109,8 +114,10 @@ rt_suites:
   - '0_sigwaittest'
   - '0_svsematest'
   - '0_rtla-osnoise'
-  - '0_rtla-timelat'
+  - '0_rtla-timerlat'
   - '0_rtla-timerlat-stress'
+  - '0_rtla-timerlat-idle'
+  - '0_cyclictest-idle'
 
 suites:
   - '0_smoke-tests'

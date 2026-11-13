@@ -1,0 +1,16 @@
+{% extends 'job-base.jinja2' %}
+{% import 'test-definition.jinja2' as td with context %}
+
+{% set job_name = 'rtla-timerlat-idle rt-isolcpus' %}
+
+{# The isolated CPUs measured without a workload: the baseline (workload
+   "idle" in the metrics); rtla keeps itself on the others. #}
+{% block tests %}
+definitions:
+{{ td.definition('rtla/rtla-timerlat.yaml', 'rtla-timerlat-idle', {
+    'DURATION': rtla_timerlat.duration|default('1m'),
+    'RT_PRIORITY': rtla_timerlat.priority|default('f:98'),
+    'BACKGROUND_CMD': '',
+    'CPUS': isolcpus,
+}) }}
+{% endblock tests -%}

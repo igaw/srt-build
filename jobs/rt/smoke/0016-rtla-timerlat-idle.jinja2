@@ -1,0 +1,15 @@
+{% extends 'job-base.jinja2' %}
+{% import 'test-definition.jinja2' as td with context %}
+
+{% set job_name = 'rtla-timerlat-idle' %}
+
+{# rtla timerlat without a workload: the baseline the runs under load
+   are compared with (workload "idle" in the metrics). #}
+{% block tests %}
+definitions:
+{{ td.definition('rtla/rtla-timerlat.yaml', 'rtla-timerlat-idle', {
+    'DURATION': rtla_timerlat.duration|default('1m'),
+    'RT_PRIORITY': rtla_timerlat.priority|default('f:98'),
+    'BACKGROUND_CMD': '',
+}) }}
+{% endblock tests -%}

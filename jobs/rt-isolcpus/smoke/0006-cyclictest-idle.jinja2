@@ -1,0 +1,19 @@
+{% extends 'job-base.jinja2' %}
+{% import 'test-definition.jinja2' as td with context %}
+
+{% set job_name = 'cyclictest-idle rt-isolcpus' %}
+
+{# One thread per isolated CPU, without a workload: the baseline
+   (workload "idle" in the metrics). #}
+{% block tests %}
+definitions:
+{{ td.definition('cyclictest/cyclictest.yaml', 'cyclictest-idle', {
+    'AFFINITY': isolcpus,
+    'BACKGROUND_CMD': '',
+    'DURATION': cyclictest.duration|default('1m'),
+    'HISTOGRAM': cyclictest.histogram|default(''),
+    'INTERVAL': cyclictest.interval|default('1000'),
+    'RT_PRIORITY': cyclictest.priority|default('98'),
+    'THREADS': isolcpus_count,
+}) }}
+{% endblock tests -%}

@@ -220,16 +220,26 @@ in a fixed order (`config.yml`, `flavors: <flavor>: combined`). For rt:
 | # | Test | Duration | Load |
 |---|---|---|---|
 | 0 | settle | 30 s | none: the end of the boot is no load to measure under |
-| 1 | rtla-timerlat | 5 min | hackbench |
-| 2 | rtla-osnoise | 5 min | hackbench (fair server off before, back on after) |
-| 3-10 | cyclictest, cyclicdeadline, pmqtest, ptsematest, svsematest, sigwaittest, signaltest, rt-migrate-test | 1 min each | hackbench |
-| 11 | rtla-timerlat-stress | 5 min | a fixed stress-ng mix (below) |
+| 1 | rtla-timerlat-idle | 5 min | none: the baseline |
+| 2 | cyclictest-idle | 1 min | none: the baseline |
+| 3 | rtla-timerlat | 5 min | hackbench |
+| 4 | rtla-osnoise | 5 min | hackbench (fair server off before, back on after) |
+| 5-12 | cyclictest, cyclicdeadline, pmqtest, ptsematest, svsematest, sigwaittest, signaltest, rt-migrate-test | 1 min each | hackbench |
+| 13 | rtla-timerlat-stress | 5 min | a fixed stress-ng mix (below) |
 
-rt-isolcpus runs its isolation check, then timerlat and osnoise
-(5 min each) and cyclictest (1 min). pi-stress keeps a boot of its
+rt-isolcpus runs its isolation check, the same idle baseline, then
+timerlat and osnoise (5 min each) and cyclictest (1 min). pi-stress keeps a boot of its
 own: it needs `rcutree.kthread_prio` on the command line and takes the
 board down when something goes wrong (round 9). The other flavors run
 a smoke test each, one boot as before.
+
+The idle runs (from round 12) measure the kernel without a workload,
+so a latency under load can be told apart from the kernel's own. Every
+exported result carries its workload (`idle`, `hackbench`,
+`stress-ng-mix`, ...; `jobs export`), and a max latency is judged
+against earlier rounds of the same board, flavor, test, workload and
+kernel series, not against a fixed limit per board: what is normal
+depends on all of them.
 
 Why: a boot per test spent most of a round booting, and one minute
 catches a test's worst case only by chance (the 30-40 % spread between
