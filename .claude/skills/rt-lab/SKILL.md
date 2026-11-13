@@ -14,20 +14,24 @@ setting or calling something a regression.
 
 ## A round
 
-1. Submit (the user usually does this): `srt-build lava <board>` builds
-   and submits; `--skip-build` reuses the installed kernels when only
-   job templates, `config.yml` flavors or test-definitions changed, not
-   `configs/`. rt and rt-isolcpus run their tests in one boot (one
+1. Submit (the user usually does this), in the kernel tree: `srt-build
+   round start` submits a release round (config.yml `rounds`, every
+   board, `--skip-build`; `--dry-run` first). A single `srt-build lava
+   <board>` (builds and submits; `--skip-build` reuses the installed
+   kernels when only job templates, `config.yml` flavors or
+   test-definitions changed, not `configs/`) is a test round tN of its
+   own. Rounds live in the round archive (doc/ROUNDS.md). rt and rt-isolcpus run their tests in one boot (one
    "rt-tests" job, report rows per test); rerun single tests with
    `--flavors rt --tests <test>`, or everything a boot per test with
    `--split`.
 2. Check the jobs carry what you expect before they run: the job
    definition's `metadata` (`srt.build`, `srt.kernel`) and its test
    definitions (e.g. `fair-server` only in rt rtla-osnoise on 6.12).
-3. Watch: `srt-build jobs watch --since <last id before the round>
-   --save <dir>`; it prints each job with a problem as it finishes. Run
-   it in the background and report problems, not every job.
-4. Report: `srt-build jobs report --ids <first>-<last> --save <dir>`.
+3. Watch: `srt-build round wait [N]`; it prints each job that ends not
+   Complete as it finishes. Run it in the background and report
+   problems, not every job. A lab failure: `round rerun N JOB`.
+4. Report: `srt-build round report [N]` fetches the round into the
+   archive and prints the table (`round compare A B` lines up two).
    Problems are: not Complete, failed cases or uploads, definitions
    without results, kernel splats or script errors on the console, a
    max latency above 1 ms. "retried" (bbb boot) is not a problem.
@@ -35,8 +39,8 @@ setting or calling something a regression.
    round on the same kernel. Normal: median change 5-9 %, one test in
    ten up to 30-40 %; small values (c2d) swing more in percent. Only a
    change beyond both about 40 % and 20 us is worth a look.
-6. Export (from the machine whose job database records what was sent):
-   `srt-build jobs export --since 0` sends whatever is missing.
+6. Export: `srt-build round export [N]` sends it from the archive
+   (without N: the newest round not sent yet).
 
 Stress rounds: `--testsuites stress-ng-class` (rtla timerlat next to
 each stress-ng class; see "Stress tests" in `doc/TUNING.md` for the

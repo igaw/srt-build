@@ -3,55 +3,42 @@
 Tooling work for srt-build, most useful first. Findings about the
 kernel and its tuning go to `TUNING.md` ("Open questions").
 
-## The job interface
+## Rounds: what is left
 
-Submitting and following a round is error prone and gets out of sync
-easily:
+Rounds and the round archive ([ROUNDS.md](ROUNDS.md)) replaced the
+job interface's old troubles: several `lava` commands per board, the
+`--testsuites default stress-ng-class` trap, one job id printed, a job
+database per checkout, shell loops to wait, `jobs report` without
+`--ids` taking each board's last command, no version or disk check
+before submitting. Every submission is now a round in the archive
+(`round start`: release, `lava`: test), the archive is the only record.
+Left:
 
-- A round is several commands per board: `lava <board> --skip-build`
-  for the default round, `lava <board> --skip-build --flavors rt
-  --testsuites stress-ng-class` for the stress classes. Nothing names
-  "round 12" as a whole; which jobs belong to it is rebuilt by hand
-  from the printed ids or LAVA's job list.
-- `--testsuites` takes one suite, and the default round is the suite
-  called `smoke`: `--testsuites default stress-ng-class` looks right
-  and fails.
-- `lava` prints only one job id per command, while submitting a dozen
-  jobs.
-- The job database knows only what this checkout submitted: a stale
-  checkout elsewhere (jobs 782-792 from nitrogen) or a job submitted by
-  hand isn't in it, and `jobs report` without `--ids` misses it.
-- Waiting for a round, or for one job, is a loop around LAVA's API in a
-  shell (`jobs watch` covers part of it).
-- Without `--ids`, `jobs report` and `jobs export` take each board's
-  last `lava` command from the database: after the two commands of a
-  round, only the stress-ng class jobs, not the default round. `jobs
-  export` should rather send everything not sent yet.
-- Nothing shows which srt-build a submission uses before it's too late:
-  jobs 782-792 came from a nitrogen checkout that hadn't pulled, and
-  round 12's second try (858-911) from one without commits that weren't
-  pushed yet; `srt.build` in the job metadata only tells afterwards.
-  `lava` should print the version it submits and warn when the
-  checkout is behind its upstream or dirty.
+- Round 13 (966-1019): `round import` once it has finished.
+- VictoriaMetrics: delete the old series of rounds 10-13 and re-export
+  them from the archive (`round export --all`). Exported before the
+  upload fix, they lack the histograms of rtla-timerlat-idle,
+  rtla-timerlat and cyclictest-idle.
+- Grafana: check the version on monitor (Trend panel: 10+) before
+  deploying the dashboards.
+- Artifactorial keeps uploads until deleted (its expiry isn't
+  scheduled): `round report` deletes them once archived; a scheduled
+  `manage.py clean` (homelab) would be a safety net, the user's call.
+- Round 14: the first round with `round start`/`wait`/`report`/`export`
+  only.
+
+## The job interface: still open
+
 - `jobs results` and `jobs compare` know the per-test jobs only: they
   pick the RT results by the suite names `0_<test>` (`rt_suites` in
   `config.yml`), and a combined job's suites are `<n>_<test>`, so its
-  results are shown without the RT handling.
+  results are shown without the RT handling. `round compare` covers
+  combined jobs; the old commands could go.
 - The LAVA server's disk is part of a round's conditions: 20G ran full
-  with four combined jobs at once (round 12, first try). Check the free
-  space before a round and while it runs, and let `jobs report` call
-  "No space left on device" an infrastructure failure, not a test one.
-
-## Plan: rounds and the round archive
-
-The fix for all of the above, agreed 2026-11-13: a round becomes the
-unit that is submitted, followed, reported and exported; its results
-go to an archive of plain files that srt-build manages, the master copy
-(LAVA has no backup, VictoriaMetrics is filled from the archive); the
-job database is extended to know rounds; the dashboards put the round
-on the x axis. The design, the steps and what each must show:
-[ROUNDS.md](ROUNDS.md). Step 1 backfills rounds 10-13 before
-Artifactorial drops their uploads (90 days, 2027-02-10).
+  with four combined jobs at once (round 12, first try). `round start`
+  and `round wait` check the free space; `jobs report` should still
+  call "No space left on device" an infrastructure failure, not a test
+  one.
 
 ## Latency limits learned from history
 
@@ -132,9 +119,9 @@ repository's, then a private one on top of it.
   checks of TUNING.md before it runs in a round.
 - The per-test jobs run in file name order (`0004-`...), the combined
   job in `config.yml`'s order: two orders to keep in mind.
-- Re-exporting jobs from before the workload label (`jobs export
-  --force`) would add a second series next to the old one: delete the
-  old series in VictoriaMetrics first.
+- Re-exporting jobs from before the workload label or with the round
+  label (`round export`) adds a second series next to the old one:
+  delete the old series in VictoriaMetrics first.
 - LAVA's validate API doesn't check that test definition names are
   unique; only the dispatcher does, when the job starts (job 793). The
   unit tests check srt-build's jobs; a check before submitting would
