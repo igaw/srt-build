@@ -14,7 +14,7 @@ import copy
 
 import yaml
 
-from .helpers import convert_to_seconds, generate_job
+from .helpers import convert_to_seconds, generate_job, job_templates
 
 # The job's name and test label: it runs the flavor's rt tests.
 JOB_TEST = "rt-tests"
@@ -48,15 +48,10 @@ def entries(flavor_cfg):
 
 def render_templates(job_path, testpath, job_ctx):
     """{job_name: parsed job} of every template in testpath."""
-    import os
-
     jobs = {}
-    for f in sorted(os.listdir(testpath)):
-        if f.endswith(".jinja2"):
-            j = yaml.safe_load(
-                generate_job(job_path, os.path.join(testpath, f), job_ctx)
-            )
-            jobs[j["job_name"]] = j
+    for path, ctx in job_templates(testpath, job_ctx):
+        j = yaml.safe_load(generate_job(job_path, path, ctx))
+        jobs[j["job_name"]] = j
     return jobs
 
 

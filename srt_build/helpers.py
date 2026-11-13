@@ -156,17 +156,49 @@ def load_job_ctx(filename):
     return job_ctx
 
 
+_templates = {}
+
+
+def _job_template(job_path, filename):
+    """The compiled template, once per process: a template with a list
+    renders hundreds of jobs (stress-ng)."""
+    key = (job_path, filename)
+    if key not in _templates:
+        with open(filename, "r") as details:
+            data = details.read()
+        string_loader = jinja2.DictLoader({filename: data})
+        type_loader = jinja2.FileSystemLoader([job_path])
+        loader = jinja2.ChoiceLoader([string_loader, type_loader])
+        env = jinja2.Environment(loader=loader, trim_blocks=True, autoescape=False)
+        _templates[key] = env.get_template(filename)
+    return _templates[key]
+
+
 def generate_job(job_path, filename, job_ctx):
     """Generate job file from Jinja2 template."""
-    with open(filename, "r") as details:
-        data = details.read()
-    string_loader = jinja2.DictLoader({filename: data})
-    type_loader = jinja2.FileSystemLoader([job_path])
-    loader = jinja2.ChoiceLoader([string_loader, type_loader])
-    env = jinja2.Environment(loader=loader, trim_blocks=True, autoescape=False)
-    job_template = env.get_template(filename)
+    return _job_template(job_path, filename).render(**job_ctx)
 
-    return job_template.render(**job_ctx)
+
+def job_templates(testpath, job_ctx):
+    """(template, job context) of every job in testpath, by file name.
+
+    A template X.jinja2 with a list X.items next to it makes one job per
+    item (a line; empty lines and # comments are skipped), rendered with
+    the item as `item`: e.g. stress-ng.jinja2 one job per stressor.
+    """
+    for file in sorted(os.listdir(testpath)):
+        if not file.endswith(".jinja2"):
+            continue
+        path = os.path.join(testpath, file)
+        items = path[: -len(".jinja2")] + ".items"
+        if not os.path.exists(items):
+            yield path, job_ctx
+            continue
+        with open(items) as f:
+            for line in f:
+                item = line.split("#", 1)[0].strip()
+                if item:
+                    yield path, {**job_ctx, "item": item}
 
 
 def generate_file(job, testname, devicename):
@@ -463,12 +495,8 @@ def process_test_files(ctx, td, job_ctx, testpath, duration, jobs, fl=None):
             yaml.dump(job, f, default_flow_style=False)
         _submit(filename, jobs)
 
-    for file in sorted(os.listdir(testpath)):
-        if not file.endswith(".jinja2"):
-            continue
-
-        filename = testpath + "/" + file
-        job = generate_job(ctx.job_path, filename, job_ctx)
+    for filename, ctx_ in job_templates(testpath, job_ctx):
+        job = generate_job(ctx.job_path, filename, ctx_)
 
         j = yaml.safe_load(job)
         if ctx.args.tests and j["job_name"] != ctx.args.tests:

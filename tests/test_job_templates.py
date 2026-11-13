@@ -9,7 +9,12 @@ import pytest
 import yaml
 
 from srt_build import config
-from srt_build.helpers import flavor_job_ctx, generate_job, load_job_ctx
+from srt_build.helpers import (
+    flavor_job_ctx,
+    generate_job,
+    job_templates,
+    load_job_ctx,
+)
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 JOBS = os.path.join(ROOT, "jobs")
@@ -22,13 +27,32 @@ FLAVORS = [
 ]
 
 
-def _templates(flavor):
-    for root, _, files in os.walk(os.path.join(JOBS, flavor)):
-        if "stress-ng" in root:
-            continue
-        for name in sorted(files):
-            if name.endswith(".jinja2"):
-                yield os.path.join(root, name)
+def _templates(flavor, job_ctx):
+    """(template, job context) of every template of the flavor; of a
+    template with a list (stress-ng) only its first item, the others
+    differ only in the item."""
+    for root, _, _ in os.walk(os.path.join(JOBS, flavor)):
+        seen = set()
+        for path, ctx in job_templates(root, job_ctx):
+            if path not in seen:
+                seen.add(path)
+                yield path, ctx
+
+
+def test_items_one_job_each():
+    """stress-ng.jinja2 makes one job per stressor in stress-ng.items,
+    named after it and running it."""
+    job_ctx = load_job_ctx(os.path.join(JOBS, "boards", "rpi3-64.yaml"))
+    job_ctx["tags"] = ["rpi3-64"]
+    jobs = [
+        yaml.safe_load(generate_job(JOBS, p, c))
+        for p, c in job_templates(os.path.join(JOBS, "rt", "stress-ng"), job_ctx)
+    ]
+    names = [j["job_name"].split()[0] for j in jobs]
+    assert len(names) == len(set(names)) > 300
+    assert names[0] == "stress-ng-access"
+    params = jobs[0]["actions"][-2]["test"]["definitions"][0]["parameters"]
+    assert params["BACKGROUND_CMD"] == "stress-ng -v --access 0"
 
 
 @pytest.mark.parametrize("board", sorted(CFG["machine_config"]))
@@ -40,8 +64,8 @@ def test_steps_are_strings(monkeypatch, board, flavor):
     job_ctx = load_job_ctx(os.path.join(JOBS, "boards", ctx.hostname + ".yaml"))
     job_ctx["tags"] = [ctx.hostname]
     flavor_job_ctx(ctx, flavor, job_ctx)
-    for path in _templates(flavor):
-        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+    for path, tctx in _templates(flavor, job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
         for action in job["actions"]:
             for d in (action.get("test") or {}).get("definitions") or []:
                 repo = d.get("repository")
@@ -62,8 +86,8 @@ def test_kernel_log_checked(monkeypatch, board, flavor):
     job_ctx = load_job_ctx(os.path.join(JOBS, "boards", ctx.hostname + ".yaml"))
     job_ctx["tags"] = [ctx.hostname]
     flavor_job_ctx(ctx, flavor, job_ctx)
-    for path in _templates(flavor):
-        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+    for path, tctx in _templates(flavor, job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
         last = job["actions"][-1].get("test") or {}
         names = [d.get("name") for d in last.get("definitions") or []]
         assert names == ["kernel-log"], f"{path}: {names}"
@@ -79,8 +103,8 @@ def test_metadata(monkeypatch, flavor):
     job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
     job_ctx["tags"] = [board]
     flavor_job_ctx(ctx, flavor, job_ctx)
-    for path in _templates(flavor):
-        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+    for path, tctx in _templates(flavor, job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
         md = job["metadata"]
         assert md["srt.board"] == board
         assert md["srt.flavor"] == flavor
@@ -97,8 +121,8 @@ def test_boot_retry(monkeypatch, board):
     job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
     job_ctx["tags"] = [board]
     flavor_job_ctx(ctx, "rt", job_ctx)
-    for path in _templates("rt"):
-        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+    for path, tctx in _templates("rt", job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
         boot = next(a["boot"] for a in job["actions"] if "boot" in a)
         if board == "bbb":
             assert boot["failure_retry"] == 2
@@ -121,8 +145,8 @@ def test_steps_are_no_console_findings(monkeypatch, flavor):
     job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
     job_ctx["tags"] = [board]
     flavor_job_ctx(ctx, flavor, job_ctx)
-    for path in _templates(flavor):
-        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+    for path, tctx in _templates(flavor, job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
         for action in job["actions"]:
             for d in (action.get("test") or {}).get("definitions") or []:
                 repo = d.get("repository")
@@ -152,8 +176,8 @@ def test_fair_server_off(monkeypatch, flavor, kernel, off):
     job_ctx["tags"] = [board]
     flavor_job_ctx(ctx, flavor, job_ctx)
     switched = 0
-    for path in _templates(flavor):
-        job = yaml.safe_load(generate_job(JOBS, path, job_ctx))
+    for path, tctx in _templates(flavor, job_ctx):
+        job = yaml.safe_load(generate_job(JOBS, path, tctx))
         names = [
             d.get("name")
             for a in job["actions"]

@@ -1,6 +1,7 @@
 {% extends 'job-base.jinja2' %}
 
-{% set job_name = 'stress-ng-shm-sysv' %}
+{# One job per stressor in stress-ng.items, rendered as item. #}
+{% set job_name = 'stress-ng-' ~ item %}
 
 {% block tests %}
 definitions:
@@ -12,7 +13,7 @@ definitions:
   parameters:
     DURATION: "1m"
     RT_PRIORITY: "f:98"
-    BACKGROUND_CMD: "stress-ng -v --shm-sysv 0"
+    BACKGROUND_CMD: "stress-ng -v --{{ item }} 0"
     ARTIFACTORIAL_URL: "{{ artifactorial_url|default('') }}"
     ARTIFACTORIAL_TOKEN: "{{ artifactorial_token|default('') }}"
 {% endblock tests -%}
