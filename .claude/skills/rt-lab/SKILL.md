@@ -42,7 +42,12 @@ Stress rounds: `--testsuites stress-ng-class` (rtla timerlat next to
 each stress-ng class; see "Stress tests" in `doc/TUNING.md` for the
 excluded stressors). A stressor suspected of a result: run its class
 per stressor with `contrib/hack/stress-ng-hunt.sh` in a hack session
-(`FROM=<stressor>` resumes after a session ran out of time).
+(`FROM=<stressor>` resumes after a session ran out of time), or with
+rtla and traced class runs with `contrib/hack/stress-night.sh`. A stop
+where a priority-120 task runs while the FIFO 98 thread waits is the
+fair server under a FIFO load (mutex, schedpolicy): exclude the
+stressor, don't chase the kernel. Until rtla locks its memory, judge
+stress results by rtla's Thr column, not Usr.
 
 Don't change lab infrastructure (LAVA, mirrors) while a round runs.
 One test per LAVA job; don't combine jobs.

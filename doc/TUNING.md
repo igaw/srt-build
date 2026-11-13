@@ -28,7 +28,7 @@ Numbers in parentheses like (job 474) are LAVA jobs of our lab; a
 | osnoise: 800 ms runtime, rtla on CPU 0 | test-definitions `rtla-osnoise.sh` | Avoids measuring RT throttling and rtla itself |
 | bbb: boot retry | `jobs/boards/bbb.yaml` | U-Boot sometimes misses the Ethernet PHY |
 | Kernel log check after each test | `jobs/job-base.jinja2` | LAVA only looks for splats during boot |
-| stress-ng: some stressors excluded, `--oom-avoid` | `jobs/rt/stress-ng-class/` | They outrank the measurement or flood the log |
+| stress-ng: some stressors excluded, `--oom-avoid` | `jobs/rt/stress-ng-class/` | They outrank the measurement, hand the CPU to the fair server, or flood the log |
 | Report: max latency above 1 ms is a problem | `srt_build/report.py` | A Complete job can still have measured 15 s |
 | One boot per flavor, fixed test order | `config.yml` `flavors: combined` | More test time per round, same conditions for every test |
 | rtla timerlat: user-space threads, FIFO 98 | test-definitions `rtla-timerlat.sh`, `PRIORITY` in the jobs | Comparable to cyclictest |
@@ -285,6 +285,8 @@ on its own next to cyclictest (c2d, hack jobs 728/729,
 | hrtimers | 8328 | High-resolution timer flood; worth its own investigation (below) |
 | schedmix | 3418 | Mixes RT and deadline policies |
 | cyclic | 829 | Its own RT measurement loop, at a high FIFO priority |
+| mutex | see below | FIFO threads that never sleep: the fair server then runs normal tasks ahead of the measurement |
+| schedpolicy | see below | Same, while its workers switch between FIFO, RR and normal |
 | acct, led, procfs, loop | 11-16 | Harmless for latency, but 600-1200 kernel messages each: process accounting, the KVM's USB keyboard LEDs, invalid `/proc/mtrr` writes, loop devices |
 
 A load that runs above the measuring thread's priority measures the
@@ -299,9 +301,73 @@ task dumps fill the console and the log.
 messages from acct in 15 s left cyclictest at 11 us (the RT kernel
 prints from a thread). The stressors are left out for clean logs.
 
-Open: hrtimers (8 ms on c2d from normal-priority tasks) needs a trace
-before it is called a kernel problem, and bbb's 48 ms in the os class
-was not hunted down on bbb itself.
+### The fair server under a FIFO load
+
+Round 11 (jobs 730-753, rtla timerlat) still measured 4-185 ms in
+the scheduler class and 13-168 ms in the os class on bbb and the Pis,
+with the stressors above excluded. No stressor on its own came close.
+A night of traced runs on all four boards (hack jobs 755-777,
+`contrib/hack/stress-night.sh`, data in `~/lava-runs/night1`) found
+the cause:
+
+- The job's own command ran for 2 hours per class and board under
+  `rtla timerlat top -a 1000` (stop at 1 ms, keep the trace): 77 stops
+  in 130 ten-minute runs. 40 came while **mutex** ran (rpi3-64 up to
+  95 ms, rpi3-32 50 ms, c2d 2.3 ms, bbb 1.5 ms), 13 while
+  **schedpolicy** ran (up to 3.6 ms), 5 in varyload and workload
+  (1.1-1.4 ms). c2d's os class had none.
+- In every mutex and schedpolicy stop, the task that kept the FIFO 98
+  timerlat thread waiting ran at **normal priority**: mostly rtla's own
+  main process (it collects the samples), else console printing
+  (`pr/ttyS0`), sshd, systemd or a stress-ng worker. On an RT kernel
+  only the fair server runs a normal task ahead of FIFO 98.
+
+What happens: mutex runs two threads per instance that take a shared
+lock at random FIFO priorities (1-86) and never sleep; schedpolicy
+switches its workers between FIFO, RR and normal while they spin.
+Normal tasks get no CPU time, and the fair server (50 ms of every
+second, as a deadline task above every FIFO priority) runs whatever
+normal task is waiting, for up to its whole 50 ms. That is the fair
+server doing its job, not a kernel bug; but a measurement under such a
+load measures the fair server. So mutex and schedpolicy are excluded
+like the stressors that outrank the measurement directly.
+
+The rest of the night's evidence:
+
+- **On their own they are harmless where nothing else waits**: mutex
+  and schedpolicy alone under rtla stayed below 0.2 ms on bbb and the
+  Pis (`stress-night.sh hunt`, and on rpi3-64 with the fair server on
+  and off, hack job 755, `contrib/hack/stressor-trace.sh`). c2d is the
+  exception: mutex alone 2-2.6 ms there.
+- **cyclictest has the same problem**: traced runs with mutex
+  (`cyclictest-trace.sh` with `LOAD`, jobs 772/773) caught the fair
+  server running cyclictest's own main thread ahead of its FIFO 98
+  threads for 4-31 ms on rpi3-64, and the console printer, sshd and
+  systemd on c2d (2-20 ms). cyclictest's main thread is busy at the
+  start of a run, so with cyclictest the hits looked like a startup
+  effect. The pilot's per-stressor numbers (cyclictest) therefore
+  overstate mutex and hrtimers.
+- **With rtla, on their own**, only schedmix (up to 31 ms), cpu-sched
+  (7 ms) and cyclic (13 ms on bbb, 6 ms on the Pis) exceed 1 ms on
+  bbb and the Pis; on c2d also hrtimers (3.9 ms) and mutex. cyclic
+  hurts only while it starts. loadavg leaves rtla without results
+  (it starts so many threads that rtla's can't start).
+- bbb's 48 ms in the pilot's os class did not come back: with mutex
+  in the mix bbb's worst stop was 1.5 ms.
+
+### rtla does not lock its memory
+
+rtla timerlat's user-space threads (`-u`, the column comparable to
+cyclictest) are not locked in memory, in 6.12 and in mainline. Under
+the memory and io classes their latency went up to 1.9 s in round 11
+while the kernel side stayed below 1 ms: the threads waited for page
+faults. On rpi3-64 under the memory class (hack job 754,
+`contrib/hack/mlock-ab.sh`): rtla 40 ms with 283 major faults,
+cyclictest without `-m` 133 ms, with `-m` 0.9 ms, rtla with
+`mlockall()` in its user-space threads 0.9 ms and no faults. The fix is
+posted upstream (rtla/timerlat: Lock the memory of the user-space
+threads). Until a kernel with it is in the lab, read the stress tests'
+**Thr** column (kernel side): it does not depend on rtla's memory.
 
 ## Board and lab quirks
 
@@ -414,6 +480,19 @@ is a kernel stress tool, not a latency workload: some of its stressors
 deliberately run at the top RT priority. The scheduler class "measured"
 15 s on two boards; one stressor held the CPUs for its 15 s slot.
 
+**A FIFO load that never sleeps measures the fair server.** On 6.12,
+when RT threads keep every CPU busy, the fair server runs normal tasks
+ahead of every FIFO priority, for up to 50 ms a second. Whatever
+normal task is waiting then delays the measurement, often the
+measuring tool's own main process. The trace shows it: a task at
+priority 120 running while the FIFO 98 thread waits.
+
+**The measuring tool is part of the system.** rtla's user-space
+threads stall on page faults because rtla doesn't lock its memory, and
+both rtla and cyclictest have a normal-priority main thread the fair
+server can run ahead of their measuring threads. Before blaming the
+kernel, check what the trace says the tool itself was doing.
+
 **Look at the numbers, not just the job state.** LAVA marked those
 jobs Complete, and so did `jobs report` until it learned to flag any
 max latency above 1 ms.
@@ -435,6 +514,8 @@ looked like lab problems until we looked closer.
 | 9 | Nov 12 | Fair server off for every rt test: osnoise fine, pi-stress broke on all boards. First bbb boot retry. |
 | 10 | Nov 12 | Fair server off for rt osnoise only. 75 of 75 jobs clean: the reference above. |
 | stress-ng pilot | Nov 12 | stress-ng classes on bbb and c2d (jobs 716-727): 15 s, 48 ms, 3.8 ms. Hunted down per stressor (hack jobs 728/729); excluded the stressors that outrank the measurement; measurement switched to rtla timerlat. |
+| 11 | Nov 12 | stress-ng classes on all boards with rtla (jobs 730-753): user-space column up to 1.9 s under memory/io (rtla doesn't lock its memory, hack job 754, fix sent upstream); scheduler and os classes still 4-185 ms. |
+| stress-ng night | Nov 12-13 | Traced class runs, per-stressor hunts and cyclictest traces on all boards (hack jobs 755-777): the fair server runs normal tasks ahead of FIFO 98 while mutex or schedpolicy spin. Both excluded. |
 
 ## Tried, didn't help
 
@@ -453,3 +534,7 @@ looked like lab problems until we looked closer.
   round 8, is the likely cause.
 - Automatic regression checks against the reference, with a threshold
   per board and test as described above.
+- stress-ng: varyload and workload stopped class runs at 1.1-1.4 ms
+  on the Pis (5 of 130 runs); not traced further. mutex alone on c2d
+  (2-2.6 ms) and hrtimers alone on c2d (3.9 ms) only matter if they
+  are put back. loadavg leaves rtla without results.
