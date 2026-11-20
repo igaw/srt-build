@@ -21,6 +21,12 @@ with the kernels installed already, as lava --skip-build does.
 `round rerun N JOB` submits JOB's definition again, unchanged (it
 carries srt.round), for a lab failure: the new job replaces JOB in
 reports and exports; JOB stays in the archive.
+
+`round repeat N` submits the jobs of round N again as a new round (the
+next number; --test: the next test round), their definitions unchanged
+but srt.round: the same kernels (those N installed, by URL), boards and
+tests. It needs no kernel tree, only LAVA: to run a release's round
+again, e.g. overnight, from anywhere the lavacli identity works.
 """
 
 import argparse
@@ -28,12 +34,15 @@ import os
 import subprocess
 import sys
 
+import yaml
+
 
 from .. import config
 from ..archive import (
     RELEASE,
     TEST,
     archive_path,
+    counted_jobs,
     load_round,
     new_round,
     next_round,
@@ -74,6 +83,16 @@ def add_parsers(sub):
     )
     p.add_argument("--yes", action="store_true", help="don't ask on warnings")
     p.set_defaults(func=cmd_round_start)
+
+    p = sub.add_parser("repeat", help="submit the jobs of a round again, a new round")
+    p.add_argument("round", help="the round to repeat: 12 (release), t3 (test)")
+    p.add_argument("--test", action="store_true", help="as a test round")
+    p.add_argument("--notes", help="a line about the round (default: repeat of N)")
+    p.add_argument(
+        "--dry-run", action="store_true", help="list the jobs, submit nothing"
+    )
+    p.add_argument("--yes", action="store_true", help="don't ask on warnings")
+    p.set_defaults(func=cmd_round_repeat)
 
     p = sub.add_parser("rerun", help="submit a job of a round again")
     p.add_argument("round", help="the round: 12 (release), t3 (test)")
@@ -305,3 +324,59 @@ def cmd_round_rerun(args, system_config, machine_config):
     info.pop("reported", None)
     save_round(archive, info)
     print(f"round {rid}: job {args.job} rerun as {new}", file=sys.stderr)
+
+
+def with_round(definition, rid):
+    """The job definition with srt.round rid, else unchanged."""
+    job = yaml.safe_load(definition)
+    job.setdefault("metadata", {})["srt.round"] = str(rid)
+    return yaml.safe_dump(job, sort_keys=False, default_flow_style=False)
+
+
+def cmd_round_repeat(args, system_config, machine_config):
+    archive = archive_path(system_config)
+    src = load_round(archive, parse_round(args.round))
+    api = LavaApi.from_config(system_config)
+    check_instance(src, system_config, api)
+    jobs = counted_jobs(src)
+    if not jobs:
+        raise SystemExit(f"round {src['round']} has no jobs")
+    kind = TEST if args.test else RELEASE
+    rid = next_round(archive, kind)
+    info = new_round(
+        rid,
+        src["lava"],
+        srt_build=src.get("srt_build"),
+        kernel=src.get("kernel"),
+        test_definitions=src.get("test_definitions"),
+    )
+    info.update(
+        boards=list(src.get("boards") or []),
+        submissions=list(src.get("submissions") or []),
+        repeats=src["round"],
+        notes=args.notes or f"repeat of {src['round']}",
+    )
+    print(f"round {rid} ({info['kind']}) on {info['lava']}: repeats round "
+          f"{src['round']}, kernel {info['kernel']}, {len(jobs)} jobs")  # fmt: skip
+    if args.dry_run:
+        for j in jobs:
+            e = src["jobs"][j]
+            print(
+                f"  would submit again: {j}  {e['board']}  {e['flavor']}  {e['test']}"
+            )
+        return
+    warnings = disk_warnings(system_config)
+    for w in warnings:
+        print(f"warning: {w}")
+    if warnings and not confirm("submit anyway?", args.yes):
+        raise SystemExit("nothing submitted")
+    definitions = {j: with_round(api.job(j)["definition"], rid) for j in jobs}
+    rpc = rpc_from_lavacli(identity=system_config.get("lava-identity", "default"))
+    save_round(archive, info)
+    for j in jobs:
+        new = rpc.scheduler.jobs.submit(definitions[j])
+        new = int(new[0] if isinstance(new, list) else new)
+        check_new_jobs(archive, info["lava"], rid, [new], own=info["jobs"])
+        info["jobs"][new] = dict(src["jobs"][j])
+        save_round(archive, info)
+    print_round(info)

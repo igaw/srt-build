@@ -115,6 +115,7 @@ test_definitions:
   commit: f6a8ad13...        # from the jobs' LAVA results, filled by round report
 kernel: v6.12.117-rt23       # git describe of the kernel tree
 notes: stress-ng classes only    # optional, free text (--notes)
+repeats: 15                  # round repeat only: the round it submitted again
 imported: '2026-11-13T17:52:31Z' # round import only: when it was backfilled
 boards: [bbb, c2d, rpi3-32, rpi3-64]
 submissions:                 # the lava commands: config.yml rounds, or the
@@ -224,10 +225,16 @@ duration.
 
 `srt-build round ...`, a command group next to `jobs` (main.py,
 commands/cmd_round*.py; what `lava` shares with them in rounds.py).
-All but `start` run without the kernel tree.
+All but `start` run without the kernel tree (`repeat` too).
 
-- `round start [--boards ...] [--round N] [--test] [--notes] [--dry-run]
-  [--yes]`
+- `round repeat N [--test] [--notes] [--dry-run] [--yes]`: round N's
+  counted jobs again, as the next round; each definition from LAVA,
+  unchanged but `metadata: srt.round`, so the same kernels (by URL),
+  boards and tests. Copies kernel, srt_build, test_definitions, boards,
+  submissions and each job's entry from N, `repeats: N`. Warns and asks
+  on low LAVA disk; no kernel tree, no lavacli (XML-RPC).
+- `round start [--boards ...] [--round N] [--test] [--skip-build] [--notes]
+  [--dry-run] [--yes]`
   - Before submitting: prints round, srt-build version, kernel, boards
     and the lava commands; warns and asks when the srt-build checkout
     has local changes, is behind or ahead of its upstream (`git status

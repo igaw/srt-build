@@ -289,3 +289,41 @@ def test_header(lab, capsys):
     assert cmd_round_start.submission_command({"split": True}) == (
         "lava --skip-build --split"
     )
+
+
+def test_repeat(lab, monkeypatch, capsys):
+    """round repeat: N's jobs again, a new round, only srt.round differs."""
+    imported(lab)
+    for j in (1, 2, 3):
+        lab.lava.jobs[j]["definition"] = yaml.safe_dump(
+            {"job_name": f"job {j}", "metadata": {"srt.round": "12", "srt.board": "x"}}
+        )
+    rpc = FakeRpc(0)
+    ids = iter([21, 22, 23])
+    rpc.submit = lambda d: rpc.definitions.append(d) or [next(ids)]
+    monkeypatch.setattr(cmd_round_start, "rpc_from_lavacli", lambda **kw: rpc)
+
+    def repeat(**kw):
+        args = {"round": "12", "test": False, "notes": None, "dry_run": False}
+        args = SimpleNamespace(**{**args, "yes": False, **kw})
+        cmd_round_start.cmd_round_repeat(args, lab.cfg, {})
+
+    repeat(dry_run=True)
+    assert "would submit again: 3" in capsys.readouterr().out
+    assert rpc.definitions == []
+    repeat()
+    info = archive.load_round(str(lab.top), "13")
+    assert info["repeats"] == "12" and info["notes"] == "repeat of 12"
+    assert sorted(info["jobs"]) == [21, 22, 23]
+    src = archive.load_round(str(lab.top), "12")
+    assert info["jobs"][21] == src["jobs"][1]
+    jobs = [yaml.safe_load(d) for d in rpc.definitions]
+    assert [j["job_name"] for j in jobs] == ["job 1", "job 2", "job 3"]
+    assert {j["metadata"]["srt.round"] for j in jobs} == {"13"}
+    assert jobs[0]["metadata"]["srt.board"] == "x"
+    # a test round, of the repeat
+    for new, old in ((21, 1), (22, 2), (23, 3)):
+        lab.lava.jobs[new] = dict(lab.lava.jobs[old], id=new)
+    ids = iter([31, 32, 33])
+    repeat(round="13", test=True)
+    assert archive.load_round(str(lab.top), "t1")["repeats"] == "13"

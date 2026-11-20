@@ -32,6 +32,7 @@ carries ``srt.round`` in its metadata.
   $ srt-build round status              # every job's state, LAVA's free disk
   $ srt-build round wait                # until all have finished
   $ srt-build round rerun 13 961        # a lab failure: run the job again
+  $ srt-build round repeat 15           # its jobs again, a new round (no tree)
   $ srt-build round report              # fetch into the archive, the table
   $ srt-build round export              # to VictoriaMetrics, label round
   $ srt-build round compare 12 13       # max latency side by side

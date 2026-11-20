@@ -144,7 +144,7 @@ def load_round(archive, rid):
 
 # round.yaml's keys in the order of doc/ROUNDS.md; others follow.
 ORDER = (
-    "format round kind lava started srt_build test_definitions kernel notes "
+    "format round kind lava started srt_build test_definitions kernel notes repeats "
     "imported boards submissions jobs reruns reported exported"
 ).split()
 
