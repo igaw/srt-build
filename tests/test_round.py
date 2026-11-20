@@ -1,6 +1,7 @@
 """round import, report and list on a fake LAVA."""
 
 import gzip
+import json
 import os
 from types import SimpleNamespace
 
@@ -167,3 +168,35 @@ def test_keep_uploads(lab, deleted):
     with pytest.raises(SystemExit):
         cmd_round_report.cmd_round_import(args, lab.cfg, {})
     assert deleted == []
+
+
+def test_list_json(lab, capsys):
+    run_import(lab)
+    capsys.readouterr()
+    cmd_round.cmd_round_list(SimpleNamespace(test=True, json=True), lab.cfg, {})
+    out = json.loads(capsys.readouterr().out)
+    assert out["archive"] == str(lab.archive)
+    r = out["rounds"][0]
+    assert (r["round"], r["kernel"], r["jobs"], r["fetched"]) == (
+        "12",
+        "v6.12.117-rt23",
+        3,
+        2,
+    )
+    assert r["result"].endswith("problems in jobs 2")
+
+
+def test_report_json(lab, capsys):
+    run_import(lab)
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        cmd_round_report.cmd_round_report(
+            SimpleNamespace(round="12", json=True), lab.cfg, {}
+        )
+    out = json.loads(capsys.readouterr().out)
+    assert out["round"] == "12"
+    assert [j["id"] for j in out["jobs"]] == [1, 2, 3]
+    assert out["jobs"][1]["problems"] == ["Incomplete"]
+    assert out["problems"] == 1
+    assert out["complete"] is False  # job 3 is running
+    assert "3 jobs, 1 Complete, 1 Incomplete, 1 not finished" in out["report"]

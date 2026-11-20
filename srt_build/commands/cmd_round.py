@@ -17,6 +17,7 @@ round started last; 12 is a release round, t3 a test round (every
 `lava` command makes one).
 """
 
+import json
 import os
 import sys
 
@@ -54,6 +55,7 @@ def add_parser(subparser):
 
     q = sub.add_parser("list", help="the rounds in the archive")
     q.add_argument("--test", action="store_true", help="also the test rounds")
+    add_json_arg(q)
     q.set_defaults(func=cmd_round_list)
     return p
 
@@ -64,6 +66,15 @@ def add_round_arg(p):
         nargs="?",
         help="the round: 12 (release), t3 (test); default: the one started last",
     )
+
+
+def add_json_arg(p):
+    p.add_argument("--json", action="store_true", help="print JSON, for scripts")
+
+
+def print_json(data):
+    """data as JSON on stdout; dates as text."""
+    print(json.dumps(data, indent=2, default=str))
 
 
 def pick_round(args, system_config):
@@ -103,30 +114,52 @@ def _result(archive, number):
         return "not reported"
 
 
-def cmd_round_list(args, system_config, machine_config):
-    archive = archive_path(system_config)
-    rows = [["round", "started", "kernel", "srt-build", "jobs", "fetched", "exported"]]
-    results = []
-    kind = None if getattr(args, "test", False) else RELEASE
+def round_rows(archive, kind=RELEASE):
+    """A dict per round of the archive, oldest first."""
+    rows = []
     for n in round_ids(archive, kind):
         info = load_round(archive, n)
         jobs = counted_jobs(info)
         fetched = set(fetched_jobs(archive, info))
         rows.append(
-            [
-                str(n),
-                str(info.get("started", ""))[:10],
-                str(info.get("kernel") or "-"),
-                str(info.get("srt_build") or "-")[:12],
-                str(len(jobs)),
-                str(len(fetched & set(jobs))),
-                str(info.get("exported") or "-")[:10],
-            ]
+            {
+                "round": str(n),
+                "started": str(info.get("started") or ""),
+                "kernel": info.get("kernel"),
+                "srt_build": info.get("srt_build"),
+                "notes": info.get("notes"),
+                "jobs": len(jobs),
+                "fetched": len(fetched & set(jobs)),
+                "exported": str(info["exported"]) if info.get("exported") else None,
+                "result": _result(archive, n),
+            }
         )
-        results.append(_result(archive, n))
-    if len(rows) == 1:
+    return rows
+
+
+def cmd_round_list(args, system_config, machine_config):
+    archive = archive_path(system_config)
+    kind = None if getattr(args, "test", False) else RELEASE
+    rounds = round_rows(archive, kind)
+    if getattr(args, "json", False):
+        print_json({"archive": archive, "rounds": rounds})
+        return
+    if not rounds:
         print(f"no rounds in {archive}")
         return
+    rows = [["round", "started", "kernel", "srt-build", "jobs", "fetched", "exported"]]
+    for r in rounds:
+        rows.append(
+            [
+                r["round"],
+                r["started"][:10],
+                str(r["kernel"] or "-"),
+                str(r["srt_build"] or "-")[:12],
+                str(r["jobs"]),
+                str(r["fetched"]),
+                (r["exported"] or "-")[:10],
+            ]
+        )
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
-    for r, result in zip(rows, ["result"] + results):
+    for r, result in zip(rows, ["result"] + [r["result"] for r in rounds]):
         print("  ".join(c.ljust(w) for c, w in zip(r, widths)) + "  " + result)

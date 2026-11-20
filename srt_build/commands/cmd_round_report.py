@@ -44,13 +44,14 @@ from ..lava_api import LavaApi
 from ..metrics import job_metadata
 from ..report import _id_ranges, format_report, parse_id_list, summarize_job
 from ..rounds import check_instance, check_new_jobs, lava_instance
-from .cmd_round import add_round_arg, pick_round
+from .cmd_round import add_json_arg, add_round_arg, pick_round, print_json
 
 
 def add_parsers(sub):
     p = sub.add_parser("report", help="fetch a round into the archive and report it")
     add_round_arg(p)
     add_keep_uploads(p)
+    add_json_arg(p)
     p.set_defaults(func=cmd_round_report)
 
     p = sub.add_parser("import", help="make a round of jobs that already ran")
@@ -131,7 +132,7 @@ def report_text(info, summaries, rdir):
     return "\n".join(lines)
 
 
-def report_round(api, system_config, archive, info, keep_uploads=False):
+def report_round(api, system_config, archive, info, keep_uploads=False, show=True):
     """Fetch what is missing, write report.txt and round.yaml; the
     summaries. api: LavaApi, or None if LAVA isn't needed. Unless
     keep_uploads, delete the uploads of whole jobs from Artifactorial
@@ -165,7 +166,8 @@ def report_round(api, system_config, archive, info, keep_uploads=False):
     ):
         info["reported"] = now()
     save_round(archive, info)
-    print(text)
+    if show:
+        print(text)
     return summaries
 
 
@@ -186,9 +188,27 @@ def delete_archived(system_config, rdir, job_ids):
 def cmd_round_report(args, system_config, machine_config):
     archive, number = pick_round(args, system_config)
     info = load_round(archive, number)
+    as_json = getattr(args, "json", False)
     summaries = report_round(
-        None, system_config, archive, info, getattr(args, "keep_uploads", False)
+        None,
+        system_config,
+        archive,
+        info,
+        getattr(args, "keep_uploads", False),
+        show=not as_json,
     )
+    if as_json:
+        rdir = round_dir(archive, number)
+        print_json(
+            {
+                "round": str(number),
+                "jobs": [s.to_dict() for s in summaries],
+                "problems": sum(1 for s in summaries if s.problems()),
+                "reruns": info.get("reruns") or {},
+                "complete": all(is_complete(rdir, j) for j in counted_jobs(info)),
+                "report": report_text(info, summaries, rdir),
+            }
+        )
     if any(s.problems() for s in summaries):
         sys.exit(1)
 

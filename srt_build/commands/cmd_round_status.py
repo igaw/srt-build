@@ -17,13 +17,14 @@ from concurrent.futures import ThreadPoolExecutor
 from ..archive import ArchiveApi, counted_jobs, load_round, round_dir
 from ..lava_api import LavaApi
 from ..rounds import check_instance
-from .cmd_round import add_round_arg, pick_round
+from .cmd_round import add_json_arg, add_round_arg, pick_round, print_json
 from .cmd_round_start import LAVA_DISK_MIN_GB, lava_free_gb
 
 
 def add_parsers(sub):
     p = sub.add_parser("status", help="state and health of a round's jobs")
     add_round_arg(p)
+    add_json_arg(p)
     p.set_defaults(func=cmd_round_status)
     p = sub.add_parser("wait", help="wait until every job of a round finished")
     add_round_arg(p)
@@ -43,11 +44,6 @@ def job_states(api, rdir, job_ids):
         return dict(pool.map(one, job_ids))
 
 
-def _disk(system_config):
-    free = lava_free_gb(system_config)
-    return "unknown" if free is None else f"{free}G"
-
-
 def cmd_round_status(args, system_config, machine_config):
     archive, rid = pick_round(args, system_config)
     info = load_round(archive, rid)
@@ -55,20 +51,49 @@ def cmd_round_status(args, system_config, machine_config):
     check_instance(info, system_config, api)
     states = job_states(api, round_dir(archive, rid), sorted(info["jobs"]))
     rerun_of = {new: old for old, new in info["reruns"].items()}
-    counts = {}
+    counts, jobs = {}, []
     for jid, (state, health) in sorted(states.items()):
         e = info["jobs"][jid]
         what = health if state == "Finished" else state
-        note = ""
-        if jid in info["reruns"]:
-            note = f"  replaced by {info['reruns'][jid]}"
-        elif jid in rerun_of:
-            note = f"  rerun of {rerun_of[jid]}"
         if jid not in info["reruns"]:
             counts[what] = counts.get(what, 0) + 1
-        print(f"{jid}  {e['board']:8} {e['flavor']:12} {e['test']:24} {what}{note}")
+        jobs.append(
+            {
+                "id": jid,
+                "board": e["board"],
+                "flavor": e["flavor"],
+                "test": e["test"],
+                "state": state,
+                "health": health,
+                "replaced_by": info["reruns"].get(jid),
+                "rerun_of": rerun_of.get(jid),
+            }
+        )
+    free = lava_free_gb(system_config)
+    if getattr(args, "json", False):
+        print_json(
+            {
+                "round": str(rid),
+                "jobs": jobs,
+                "counts": counts,
+                "finished": all(
+                    j["state"] == "Finished" for j in jobs if not j["replaced_by"]
+                ),
+                "lava_disk_free_gb": free,
+            }
+        )
+        return
+    for j in jobs:
+        what = j["health"] if j["state"] == "Finished" else j["state"]
+        note = ""
+        if j["replaced_by"]:
+            note = f"  replaced by {j['replaced_by']}"
+        elif j["rerun_of"]:
+            note = f"  rerun of {j['rerun_of']}"
+        print(f"{j['id']}  {j['board']:8} {j['flavor']:12} {j['test']:24} {what}{note}")
     summary = ", ".join(f"{n} {w}" for w, n in sorted(counts.items()))
-    print(f"\nround {rid}: {summary}; LAVA disk free: {_disk(system_config)}")
+    disk = "unknown" if free is None else f"{free}G"
+    print(f"\nround {rid}: {summary}; LAVA disk free: {disk}")
 
 
 def cmd_round_wait(args, system_config, machine_config, sleep=time.sleep):

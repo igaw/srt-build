@@ -12,12 +12,14 @@ from ..archive import ArchiveApi, counted_jobs, load_round, round_dir
 from ..archive import archive_path, parse_round
 from ..metrics import definition_workloads, job_labels
 from ..report import summarize_job
+from .cmd_round import add_json_arg, print_json
 
 
 def add_parsers(sub):
     p = sub.add_parser("compare", help="two rounds side by side")
     p.add_argument("a", help="a round: 12 (release), t3 (test)")
     p.add_argument("b", help="the other round")
+    add_json_arg(p)
     p.set_defaults(func=cmd_round_compare)
 
 
@@ -63,11 +65,37 @@ def compare_lines(ra, rb, a, b):
     return ["  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip() for r in rows]
 
 
+def compare_json(ra, rb, a, b, pa, pb):
+    rows = []
+    for key in sorted(set(ra) | set(rb)):
+        va, vb = ra.get(key), rb.get(key)
+        change = None
+        if va and vb is not None:
+            change = round((vb - va) / va * 100, 1)
+        board, flavor, test, workload = key
+        rows.append(
+            {
+                "board": board,
+                "flavor": flavor,
+                "test": test,
+                "workload": workload,
+                "a": va,
+                "b": vb,
+                "change_percent": change,
+            }
+        )
+    a, b = str(a), str(b)
+    return {"a": a, "b": b, "rows": rows, "problems": {a: pa, b: pb}}
+
+
 def cmd_round_compare(args, system_config, machine_config):
     archive = archive_path(system_config)
     a, b = parse_round(args.a), parse_round(args.b)
     ra, pa = round_results(archive, a)
     rb, pb = round_results(archive, b)
+    if getattr(args, "json", False):
+        print_json(compare_json(ra, rb, a, b, pa, pb))
+        return
     print("\n".join(compare_lines(ra, rb, a, b)))
     for rid, problems in ((a, pa), (b, pb)):
         if problems:
