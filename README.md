@@ -2,6 +2,10 @@
 
 tooling to build RT test kernels with Lava.
 
+The user documentation is in `docs/` (Sphinx, `make -C docs html`):
+installation, configuration, testing a release, rounds, debugging on a
+board, agents and the command line.
+
 ## Rounds
 
 A round is the unit that is submitted, followed, reported and

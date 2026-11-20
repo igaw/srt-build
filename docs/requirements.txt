@@ -1,0 +1,6 @@
+sphinx>=7
+sphinx-rtd-theme>=2
+sphinx-argparse>=0.4
+# srt-build's own, for the command line page
+jinja2
+PyYAML
