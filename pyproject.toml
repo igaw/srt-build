@@ -6,3 +6,8 @@ target-version = ['py312']
 line-length = 88
 lint.select = ["E", "F", "W", "C", "B", "SIM"]
 lint.extend-ignore = ["E203"]
+
+[tool.pytest.ini_options]
+# srt-build runs from the source tree, it isn't installed
+pythonpath = ["."]
+testpaths = ["tests"]
