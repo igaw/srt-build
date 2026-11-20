@@ -27,3 +27,7 @@ jobs:
         run: black --check .
       - name: Pytest
         run: pytest -q
+      - name: Docs
+        run: |
+          pip install -r docs/requirements.txt
+          sphinx-build -W -b html docs docs/_build/html
