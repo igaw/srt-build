@@ -193,8 +193,13 @@ def test_round_start(lab):
     text = error(lab.server(), "round_start", tree="v6.12-rt", dry_run=False)
     assert "--allow-submit" in text
     s = lab.server(allow_submit=True)
-    ok(s, "round_start", tree="v6.12-rt", test=True, dry_run=False, yes=True)
-    assert lab.tasks == [(["round", "start", "--test", "--yes"], lab.tree)]
+    out = ok(s, "round_start", tree="v6.12-rt", test=True, dry_run=False, yes=True)
+    (lab.state / f"{out['task']}.rc").write_text("0\n")  # finished
+    ok(s, "round_start", tree="v6.12-rt", build=True, dry_run=False)
+    assert lab.tasks == [
+        (["round", "start", "--test", "--yes"], lab.tree),
+        (["round", "start", "--build"], lab.tree),
+    ]
     assert "one line" in error(s, "round_start", tree="v6.12-rt", notes="a\nb")
 
 

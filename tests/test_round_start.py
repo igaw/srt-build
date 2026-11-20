@@ -27,6 +27,7 @@ def lab(tmp_path, monkeypatch, deleted):
     monkeypatch.setattr(cmd_round_start, "kernel_describe", lambda: "v6.12.117-rt23")
     monkeypatch.setattr(cmd_round_start, "checkout_warnings", lambda **kw: [])
     monkeypatch.setattr(cmd_round_start, "lava_free_gb", lambda c: 30)
+    monkeypatch.setattr(helpers, "ensure_lavacli_available", lambda: None)
     submitted = []
 
     def fake_submit(path, jobs):
@@ -208,3 +209,68 @@ def test_a_lava_command_is_a_test_round(lab, monkeypatch, capsys):
     assert helpers.get_job_list(ctx, lab.cfg) == [ids[0], ids2[0]]
     assert helpers.get_jobs("c2d", ids2[1], lab.cfg, batch=True) == ids2
     assert helpers.get_jobs("c2d", ids2[1], lab.cfg) == [ids2[1]]
+
+
+@pytest.fixture
+def builds(lab, monkeypatch):
+    """Fake config/build/install in lava: notes (step, flavor, jobs so far)."""
+    from srt_build.commands import cmd_lava
+
+    steps = []
+    lab.fail = None
+
+    def step(name):
+        def run(ctx, *a):
+            steps.append((name, ctx.args.flavor, len(lab.submitted)))
+            return 1 if name == "build" and ctx.args.flavor == lab.fail else 0
+
+        return run
+
+    for name in ("config", "build", "install"):
+        monkeypatch.setattr(cmd_lava, f"cmd_{name}", step(name))
+    return steps
+
+
+def test_build_first(lab, builds, capsys):
+    """--build: every flavor once per board, all before the first job."""
+    start(lab, build=True)
+    built = [f for s, f, _ in builds if s == "build"]
+    assert built and sorted(built) == sorted(set(built))  # each once
+    assert {n for _, _, n in builds} == {0}  # nothing submitted yet
+    assert [s for s, _, _ in builds[:3]] == ["config", "build", "install"]
+    assert lab.submitted and archive.round_ids(str(lab.top)) == ["1"]
+    assert "c2d: built " in capsys.readouterr().out
+
+
+def test_without_build_nothing_is_built(lab, builds):
+    start(lab)
+    assert builds == [] and lab.submitted
+
+
+def test_dry_run_does_not_build(lab, builds, capsys):
+    start(lab, build=True, dry_run=True)
+    assert builds == [] and lab.submitted == []
+    assert "builds first (not in a dry run)" in capsys.readouterr().out
+
+
+def test_failed_build_submits_nothing(lab, builds):
+    lab.fail = "rt"
+    with pytest.raises(SystemExit, match="c2d rt: build failed"):
+        start(lab, build=True)
+    assert ("install", "rt", 0) not in builds
+    assert lab.submitted == [] and archive.round_ids(str(lab.top)) == []
+
+
+def test_lavacli_that_does_not_run(monkeypatch, tmp_path, caplog):
+    """A lavacli of a replaced Python: in PATH, but broken."""
+    lavacli = tmp_path / "lavacli"
+    lavacli.write_text(
+        "#!/bin/sh\necho \"ModuleNotFoundError: No module named 'lavacli'\" >&2\n"
+        "exit 1\n"
+    )
+    lavacli.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(SystemExit):
+        helpers.ensure_lavacli_available()
+    assert "does not run (ModuleNotFoundError" in caplog.text
+    assert "pipx reinstall lavacli" in caplog.text

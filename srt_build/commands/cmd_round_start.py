@@ -1,6 +1,7 @@
 """round start and round rerun - submit a round, replace a job of it.
 
-  srt-build round start [--boards bbb,c2d] [--round N] [--test] [--dry-run]
+  srt-build round start [--boards bbb,c2d] [--round N] [--test] [--build]
+                        [--dry-run]
   srt-build round rerun 13 961
 
 `round start` runs in the kernel tree, like `lava`: one `lava <board>
@@ -12,6 +13,9 @@ checkout has local changes, is behind or ahead of its upstream, or the
 LAVA server's disk is low. round.yaml is written before the first job
 and after each board. --dry-run renders every job and submits nothing.
 --test makes a test round (t1, t2, ...), as a plain `lava` command does.
+--build first builds and installs, per board, every flavor the
+submissions use, each once, all before the first job: a failed build
+stops with nothing submitted and no round in the archive.
 
 `round rerun N JOB` submits JOB's definition again, unchanged (it
 carries srt.round), for a lab failure: the new job replaces JOB in
@@ -36,6 +40,7 @@ from ..archive import (
     round_ids,
     save_round,
 )
+from .. import helpers
 from ..helpers import Context, srt_build_version
 from ..lava_api import LavaApi, rpc_from_lavacli
 from ..rounds import (
@@ -58,6 +63,11 @@ def add_parsers(sub):
     p.add_argument("--round", help="its number (default: the next)")
     p.add_argument("--test", action="store_true", help="a test round (t1, t2, ...)")
     p.add_argument("--notes", help="a line about the round, for round.yaml")
+    p.add_argument(
+        "--build",
+        action="store_true",
+        help="build and install the boards' kernels first (else: the installed)",
+    )
     p.add_argument(
         "--dry-run", action="store_true", help="render the jobs, submit nothing"
     )
@@ -203,6 +213,31 @@ def dry_run_board(ctx_args, system_config, machine_config, kernel_config):
         print(f"  would submit: {e['board']} {e['flavor']} {e['test']}")
 
 
+def build_board(board, subs, rid, system_config, machine_config, kernel_config):
+    """Build and install every flavor of the board's submissions, once."""
+    from .cmd_lava import cmd_lava
+
+    built = set()
+    for sub in subs:
+        ctx_args = board_args(board, sub, rid)
+        ctx_args.skip_build = False
+        ctx_args.built = built
+        ctx = Context(ctx_args, machine_config, system_config)
+        ctx.submit = recording_submit([], True)
+        cmd_lava(ctx, system_config, kernel_config)
+    print(f"{board}: built {', '.join(sorted(built)) or 'nothing'}")
+
+
+def dry_run(info, build, system_config, machine_config, kernel_config):
+    """Render every job of the round, build and submit nothing."""
+    if build:
+        print("  builds first (not in a dry run): every flavor per board")
+    for board in info["boards"]:
+        for sub in info["submissions"]:
+            dry_run_board(board_args(board, sub, info["round"]), system_config,
+                          machine_config, kernel_config)  # fmt: skip
+
+
 def cmd_round_start(args, system_config, machine_config, kernel_config):
     archive = archive_path(system_config)
     info = plan(args, system_config, machine_config)
@@ -216,14 +251,17 @@ def cmd_round_start(args, system_config, machine_config, kernel_config):
     warnings = checkout_warnings(fetch=not args.dry_run) + disk_warnings(system_config)
     for w in warnings:
         print(f"warning: {w}")
+    build = getattr(args, "build", False)
     if args.dry_run:
-        for board in info["boards"]:
-            for sub in subs:
-                dry_run_board(board_args(board, sub, rid), system_config,
-                              machine_config, kernel_config)  # fmt: skip
+        dry_run(info, build, system_config, machine_config, kernel_config)
         return
     if warnings and not confirm("submit anyway?", args.yes):
         raise SystemExit("nothing submitted")
+    helpers.ensure_lavacli_available()
+    if build:
+        for board in info["boards"]:
+            build_board(board, subs, rid, system_config, machine_config,
+                        kernel_config)  # fmt: skip
 
     save_round(archive, info)
     for board in info["boards"]:

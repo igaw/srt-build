@@ -10,48 +10,52 @@ in the stable-rt-tools documentation. The release tree, e.g.
 command below.
 
 The test is a release round: every board, every flavor, the smoke tests
-and the stress tests, with the release's kernels. Before it, each board
-gets the release built and installed.
+and the stress tests, with the release's kernels. ``round start --build``
+builds and installs them and submits the round, in one go.
 
-1. Build and install
---------------------
+1. Build and submit the release round
+-------------------------------------
 
 .. code-block:: console
 
   $ cd ~/rt/v6.12-rt
-  $ srt-build lava bbb
-  $ srt-build lava c2d
-  $ srt-build lava rpi3-32
-  $ srt-build lava rpi3-64
+  $ srt-build round start --build --dry-run --notes "v6.12.118-rt24"
+  $ srt-build round start --build --notes "v6.12.118-rt24"
 
-``srt-build lava <board>`` builds every flavor of the board, installs the
-kernels where the board's jobs boot them from, and submits the smoke tests
-as a test round of its own (``t4``, ...; it prints the round and the job
-ids). That is a first check: a kernel which doesn't build or boot shows up
-here, before the release round takes the lab. The boards are those of
-``rounds: boards`` in ``config.yml``.
+``--build`` builds every flavor the round uses on each board of ``rounds:
+boards`` in ``config.yml``, each once, and installs the kernels where the
+boards' jobs boot them from, all before the first job is submitted: a
+build that fails stops ``round start`` with nothing submitted and no round
+in the archive. Then ``round start`` submits, per board, one ``lava
+--skip-build`` per entry of ``rounds: submissions`` (the smoke tests of
+every flavor, the stress-ng classes of ``rt``). The round gets the next
+number (``13``) and records the kernel (``git describe``), the srt-build
+commit and every job. The builds take a while: run it in a ``tmux`` or
+``screen`` session.
 
-Follow a test round like any round (see below): ``srt-build round wait
-t4``, ``srt-build round report t4``.
+Without ``--build``, ``round start`` submits with the kernels installed
+already, e.g. to submit a round again on the same kernels.
 
-2. The release round
---------------------
+The dry run builds nothing and submits nothing; it renders the jobs and
+shows the warnings. ``round start`` warns, and asks, when the srt-build
+checkout has local changes or isn't in sync with its upstream (a round
+should be reproducible from a pushed commit), or when the LAVA server is
+low on disk; it asks before the builds, so the answer isn't needed hours
+later. It checks that ``lavacli`` runs before it builds.
+
+2. Optional: a quick check per board first
+------------------------------------------
 
 .. code-block:: console
 
-  $ srt-build round start --dry-run --notes "v6.12.118-rt24"
-  $ srt-build round start --notes "v6.12.118-rt24"
+  $ srt-build lava bbb
 
-``round start`` submits, per board, one ``lava --skip-build`` per entry of
-``rounds: submissions`` (the smoke tests of every flavor, the stress-ng
-classes of ``rt``), with the kernels step 1 installed: run it in the same
-tree, at the same commit. The round gets the next number (``13``) and
-records the kernel (``git describe``), the srt-build commit and every job.
-
-The dry run renders the jobs and submits nothing. ``round start`` warns,
-and asks, when the srt-build checkout has local changes or isn't in sync
-with its upstream (a round should be reproducible from a pushed commit), or
-when the LAVA server is low on disk.
+``srt-build lava <board>`` builds and installs every flavor of one board
+and submits only its smoke tests, as a test round of its own (``t4``,
+...). A kernel which doesn't build or boot shows up here, before the
+release round takes the lab for hours; ``srt-build round wait t4``,
+``srt-build round report t4``. After it, ``round start`` without
+``--build`` uses those kernels.
 
 3. Follow and report
 --------------------

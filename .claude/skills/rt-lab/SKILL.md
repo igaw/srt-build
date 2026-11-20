@@ -25,7 +25,9 @@ means the user runs it or restarts the server; don't work around it.
 
 1. Submit (the user usually does this), in the kernel tree: `srt-build
    round start` submits a release round (config.yml `rounds`, every
-   board, `--skip-build`; `--dry-run` first). A single `srt-build lava
+   board, `--skip-build`; `--dry-run` first; `--build` builds and
+   installs every board's kernels first, a failed build submits
+   nothing). A single `srt-build lava
    <board>` (builds and submits; `--skip-build` reuses the installed
    kernels when only job templates, `config.yml` flavors or
    test-definitions changed, not `configs/`) is a test round tN of its

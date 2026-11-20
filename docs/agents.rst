@@ -18,7 +18,8 @@ Its tools run srt-build itself, without a terminal:
     Fetch and report a round, send it to VictoriaMetrics, as by hand.
 ``lava``, ``round_start``
     Build, install and submit a test round; submit a round with the
-    installed kernels (a dry run unless asked otherwise). They run as
+    installed kernels, or with ``build`` build and install them first (a
+    dry run unless asked otherwise). They run as
     tasks in their own session, which outlive the client, one per tree.
 ``task_status``, ``tasks``
     Follow the tasks: running, finished with exit code, or lost, and the

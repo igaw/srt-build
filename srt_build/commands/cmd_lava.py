@@ -56,12 +56,24 @@ def add_parser(subparser):
 
 
 def build_flavor(ctx, fl, kernel_config):
-    """Build a specific flavor if not skipped."""
-    if not ctx.args.skip_build:
-        ctx.args.flavor = fl
-        cmd_config(ctx, kernel_config)
-        cmd_build(ctx)
-        cmd_install(ctx)
+    """Build a specific flavor if not skipped.
+
+    A failed build stops: its jobs would boot the kernel installed
+    before. ctx.args.built (round start --build) is the set of flavors
+    built already for the board, each is built once.
+    """
+    if ctx.args.skip_build:
+        return
+    built = getattr(ctx.args, "built", None)
+    if built is not None:
+        if fl in built:
+            return
+        built.add(fl)
+    ctx.args.flavor = fl
+    cmd_config(ctx, kernel_config)
+    if cmd_build(ctx):
+        raise SystemExit(f"{ctx.hostname} {fl}: build failed, nothing installed")
+    cmd_install(ctx)
 
 
 def extract_test_name(test_path, test_file):

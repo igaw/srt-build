@@ -53,7 +53,8 @@ Read first: boards, rounds (the archive), round_status (LAVA),
 round_compare. A release's test: lava builds the kernel of a tree
 (e.g. v6.12-rt, the srt release), installs it for a board and submits
 a test round; round_start submits a release round with the installed
-kernels (dry_run first). Both run as tasks: follow them with
+kernels, with build true it builds and installs them first (dry_run
+first). Both run as tasks: follow them with
 task_status, then the round with round_status until finished, then
 round_report (fetches the round into the archive and reports
 problems) and round_compare against the previous round on the same
@@ -317,7 +318,8 @@ class Server:
             Tool(
                 "round_start",
                 "Submit a round with the installed kernels, every board and "
-                "entry of config.yml rounds (in the tree). A dry run renders "
+                "entry of config.yml rounds (in the tree); build: build and "
+                "install every board's kernels first. A dry run renders "
                 "the jobs and shows the warnings; the real one (a task) needs "
                 "--allow-submit, and yes after the maintainer saw the "
                 "warnings.",
@@ -331,6 +333,11 @@ class Server:
                         },
                         "boards": {"type": "string", "description": "e.g. bbb,c2d"},
                         "notes": {"type": "string"},
+                        "build": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "build and install the kernels first",
+                        },
                         "dry_run": {"type": "boolean", "default": True},
                         "yes": {
                             "type": "boolean",
@@ -585,6 +592,8 @@ class Server:
             if not isinstance(notes, str) or "\n" in notes:
                 raise ToolError("notes must be one line")
             cmd += ["--notes", notes]
+        if self._bool(args, "build", False):
+            cmd.append("--build")
         if self._bool(args, "dry_run", True):
             return self._text(cmd + ["--dry-run"], cwd=cwd)
         self._need(self.opts.allow_submit, "--allow-submit", "srt-build round start")

@@ -25,6 +25,7 @@ carries ``srt.round`` in its metadata.
 
   $ srt-build round start --dry-run     # what it would submit
   $ srt-build round start               # release round, the next number
+  $ srt-build round start --build       # build and install the kernels first
   $ srt-build round start --test --notes "nohz=off"   # a test round
   $ srt-build round status              # every job's state, LAVA's free disk
   $ srt-build round wait                # until all have finished
