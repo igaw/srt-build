@@ -10,6 +10,7 @@ import asyncio
 from .config import load_config, bcolors
 from .core import setup, check_kernel_source_directory
 from .helpers import Context
+from . import mcp
 from .commands import (
     cmd_config,
     cmd_build,
@@ -46,6 +47,7 @@ def create_parser():
     cmd_kexec.add_parser(subparser)
     cmd_all.add_parser(subparser)
     cmd_round.add_parser(subparser)
+    mcp.add_parser(subparser)
 
     return parser
 
@@ -84,6 +86,10 @@ def main():  # noqa: C901 (command dispatch, one branch per command)
     ):
         if args.debug:
             logging.basicConfig(level=logging.DEBUG)
+        args.func(args, system_config, machine_config)
+        return
+    # srt-build mcp runs every command as srt-build itself.
+    if args.cmd == "mcp":
         args.func(args, system_config, machine_config)
         return
     # So do the round commands, but for round start, which submits

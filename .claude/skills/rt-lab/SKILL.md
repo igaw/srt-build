@@ -12,6 +12,15 @@ set up, why, what the results normally look like (round 10 table,
 normal variation) and what was learned; read it before changing a
 setting or calling something a regression.
 
+## With the srt-build MCP server
+
+If the `srt-build` MCP tools are there (`srt-build mcp`, README
+"Agents"), use them for the steps below: `rounds`, `round_status`,
+`round_report`, `round_compare` and `round_export` instead of the
+commands, `lava` and `round_start` as tasks followed with
+`task_status`. A tool refused for `--allow-submit` or `--allow-delete`
+means the user runs it or restarts the server; don't work around it.
+
 ## A round
 
 1. Submit (the user usually does this), in the kernel tree: `srt-build

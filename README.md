@@ -187,6 +187,33 @@ tick mode, HZ), plus every value a fragment requests that isn't in the
 final config: renamed or removed symbols, and dependencies the
 architecture doesn't meet.
 
+## Agents (MCP)
+
+`round list`, `round status`, `round compare` and `round report` take
+`--json` for scripts. `srt-build mcp` serves the lab to an agent as an
+[MCP](https://modelcontextprotocol.io) server on stdin and stdout; the
+kernel trees are named relative to `--trees`:
+
+    claude mcp add srt-build -- ~/srt-build/srt-build mcp --trees ~/rt
+
+Its tools run srt-build itself, without a terminal:
+
+- `boards`, `tests`, `rounds`, `round_status`, `round_compare`: read
+  the configuration, the archive and LAVA;
+- `round_report`, `round_export`: fetch and report a round, send it to
+  VictoriaMetrics, as by hand;
+- `lava` (build, install, submit a test round) and `round_start` (a
+  round with the installed kernels, a dry run unless asked otherwise)
+  run as tasks, which outlive the client, one per tree;
+  `task_status` and `tasks` follow them;
+- `round_rerun`, `round_drop`.
+
+Whoever starts the server decides what the agent may do to the lab:
+`lava`, a real `round_start` and `round_rerun` take the boards and
+need `--allow-submit`; a real `round_drop` needs `--allow-delete`.
+Without them the agent gets told to ask. The tasks' logs are in
+`~/.local/state/srt-build/mcp`.
+
 ## Development
 
 Quickstart:
