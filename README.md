@@ -13,15 +13,17 @@ exported; its results go to the round archive
 (`~/.local/share/srt-build/rounds`, `round-archive` in `system_config`),
 the master copy and the only record of what was submitted
 (doc/ROUNDS.md). Release rounds (10, 11, ...) are the reference runs:
-`round start` submits, per board, one `lava --skip-build` per entry of
+`round start` builds and installs every board's kernels (`--skip-build`:
+the installed ones), then submits, per board, one `lava --skip-build`
+per entry of
 `rounds: submissions` in `config.yml`. Everything else is a test round
 (t1, t2, ...): each `lava` or `smoke` command makes one, and `round
 prune` drops them after `test-retention-days`.
 
     cd ~/linux                            # the kernel tree, as for lava
     srt-build round start --dry-run       # what it would submit
-    srt-build round start                 # release round, the next number
-    srt-build round start --build         # build and install the kernels first
+    srt-build round start                 # build, install, release round
+    srt-build round start --skip-build    # with the kernels installed already
     srt-build round start --test --notes "nohz=off"   # test round t1, t2, ...
     srt-build round status                # every job's state, LAVA's free disk
     srt-build round wait                  # until all have finished

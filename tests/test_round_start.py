@@ -55,7 +55,8 @@ def lab(tmp_path, monkeypatch, deleted):
 
 def start(lab, **kw):
     args = {"boards": None, "round": None, "test": False, "notes": None}
-    args = SimpleNamespace(**{**args, "dry_run": False, "yes": False, **kw})
+    args = {**args, "dry_run": False, "yes": False, "skip_build": True}
+    args = SimpleNamespace(**{**args, **kw})
     cmd_round_start.cmd_round_start(args, lab.cfg, lab.machines, {})
 
 
@@ -232,8 +233,8 @@ def builds(lab, monkeypatch):
 
 
 def test_build_first(lab, builds, capsys):
-    """--build: every flavor once per board, all before the first job."""
-    start(lab, build=True)
+    """By default: every flavor once per board, all before the first job."""
+    start(lab, skip_build=False)
     built = [f for s, f, _ in builds if s == "build"]
     assert built and sorted(built) == sorted(set(built))  # each once
     assert {n for _, _, n in builds} == {0}  # nothing submitted yet
@@ -242,13 +243,13 @@ def test_build_first(lab, builds, capsys):
     assert "c2d: built " in capsys.readouterr().out
 
 
-def test_without_build_nothing_is_built(lab, builds):
-    start(lab)
+def test_skip_build_builds_nothing(lab, builds):
+    start(lab, skip_build=True)
     assert builds == [] and lab.submitted
 
 
 def test_dry_run_does_not_build(lab, builds, capsys):
-    start(lab, build=True, dry_run=True)
+    start(lab, skip_build=False, dry_run=True)
     assert builds == [] and lab.submitted == []
     assert "builds first (not in a dry run)" in capsys.readouterr().out
 
@@ -256,7 +257,7 @@ def test_dry_run_does_not_build(lab, builds, capsys):
 def test_failed_build_submits_nothing(lab, builds):
     lab.fail = "rt"
     with pytest.raises(SystemExit, match="c2d rt: build failed"):
-        start(lab, build=True)
+        start(lab, skip_build=False)
     assert ("install", "rt", 0) not in builds
     assert lab.submitted == [] and archive.round_ids(str(lab.top)) == []
 

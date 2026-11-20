@@ -10,8 +10,8 @@ in the stable-rt-tools documentation. The release tree, e.g.
 command below.
 
 The test is a release round: every board, every flavor, the smoke tests
-and the stress tests, with the release's kernels. ``round start --build``
-builds and installs them and submits the round, in one go.
+and the stress tests, with the release's kernels. ``round start`` builds
+and installs them and submits the round, in one go.
 
 1. Build and submit the release round
 -------------------------------------
@@ -19,24 +19,24 @@ builds and installs them and submits the round, in one go.
 .. code-block:: console
 
   $ cd ~/rt/v6.12-rt
-  $ srt-build round start --build --dry-run
-  $ srt-build round start --build
+  $ srt-build round start --dry-run
+  $ srt-build round start
 
-``--build`` builds every flavor the round uses on each board of ``rounds:
-boards`` in ``config.yml``, each once, and installs the kernels where the
-boards' jobs boot them from, all before the first job is submitted: a
-build that fails stops ``round start`` with nothing submitted and no round
-in the archive. Then ``round start`` submits, per board, one ``lava
+``round start`` builds every flavor the round uses on each board of
+``rounds: boards`` in ``config.yml``, each once, and installs the kernels
+where the boards' jobs boot them from, all before the first job is
+submitted: a build that fails stops ``round start`` with nothing submitted
+and no round in the archive. Then it submits, per board, one ``lava
 --skip-build`` per entry of ``rounds: submissions`` (the smoke tests of
 every flavor, the stress-ng classes of ``rt``). The round gets the next
 number (``13``) and records the kernel (``git describe``, e.g.
 ``v6.12.118-rt24``), the srt-build commit and every job; ``round list``
 shows the kernel. ``--notes`` is only for what the kernel doesn't tell,
-e.g. ``--notes "bbb on a new power supply"``. The builds take a while: run it in a ``tmux`` or
-``screen`` session.
+e.g. ``--notes "bbb on a new power supply"``. The builds take a while:
+run it in a ``tmux`` or ``screen`` session.
 
-Without ``--build``, ``round start`` submits with the kernels installed
-already, e.g. to submit a round again on the same kernels.
+``--skip-build`` submits with the kernels installed already, e.g. to
+submit a round again on the same kernels.
 
 The dry run builds nothing and submits nothing; it renders the jobs and
 shows the warnings. ``round start`` warns, and asks, when the srt-build
@@ -56,8 +56,8 @@ later. It checks that ``lavacli`` runs before it builds.
 and submits only its smoke tests, as a test round of its own (``t4``,
 ...). A kernel which doesn't build or boot shows up here, before the
 release round takes the lab for hours; ``srt-build round wait t4``,
-``srt-build round report t4``. After it, ``round start`` without
-``--build`` uses those kernels.
+``srt-build round report t4``. After it, ``round start --skip-build``
+uses those kernels.
 
 3. Follow and report
 --------------------

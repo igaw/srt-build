@@ -12,7 +12,9 @@ Release rounds and test rounds
 ------------------------------
 
 Release rounds (``10``, ``11``, ...) are the reference runs:
-``round start`` submits, per board, one ``lava --skip-build`` per entry of
+``round start`` builds and installs every board's kernels (``--skip-build``:
+the installed ones), then submits, per board, one ``lava --skip-build``
+per entry of
 ``rounds: submissions`` in ``config.yml``. Everything else is a test round
 (``t1``, ``t2``, ...): each ``lava`` or ``smoke`` command makes one, and
 ``round start --test`` does too. ``round prune`` drops test rounds after
@@ -24,8 +26,8 @@ carries ``srt.round`` in its metadata.
 .. code-block:: console
 
   $ srt-build round start --dry-run     # what it would submit
-  $ srt-build round start               # release round, the next number
-  $ srt-build round start --build       # build and install the kernels first
+  $ srt-build round start               # build, install, release round
+  $ srt-build round start --skip-build  # with the kernels installed already
   $ srt-build round start --test --notes "nohz=off"   # a test round
   $ srt-build round status              # every job's state, LAVA's free disk
   $ srt-build round wait                # until all have finished

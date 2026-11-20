@@ -1,7 +1,7 @@
 """round start and round rerun - submit a round, replace a job of it.
 
-  srt-build round start [--boards bbb,c2d] [--round N] [--test] [--build]
-                        [--dry-run]
+  srt-build round start [--boards bbb,c2d] [--round N] [--test]
+                        [--skip-build] [--dry-run]
   srt-build round rerun 13 961
 
 `round start` runs in the kernel tree, like `lava`: one `lava <board>
@@ -13,9 +13,10 @@ checkout has local changes, is behind or ahead of its upstream, or the
 LAVA server's disk is low. round.yaml is written before the first job
 and after each board. --dry-run renders every job and submits nothing.
 --test makes a test round (t1, t2, ...), as a plain `lava` command does.
---build first builds and installs, per board, every flavor the
-submissions use, each once, all before the first job: a failed build
-stops with nothing submitted and no round in the archive.
+It first builds and installs, per board, every flavor the submissions
+use, each once, all before the first job: a failed build stops with
+nothing submitted and no round in the archive. --skip-build submits
+with the kernels installed already, as lava --skip-build does.
 
 `round rerun N JOB` submits JOB's definition again, unchanged (it
 carries srt.round), for a lab failure: the new job replaces JOB in
@@ -64,9 +65,9 @@ def add_parsers(sub):
     p.add_argument("--test", action="store_true", help="a test round (t1, t2, ...)")
     p.add_argument("--notes", help="a line about the round, for round.yaml")
     p.add_argument(
-        "--build",
+        "--skip-build",
         action="store_true",
-        help="build and install the boards' kernels first (else: the installed)",
+        help="don't build, submit with the kernels installed already",
     )
     p.add_argument(
         "--dry-run", action="store_true", help="render the jobs, submit nothing"
@@ -232,6 +233,8 @@ def dry_run(info, build, system_config, machine_config, kernel_config):
     """Render every job of the round, build and submit nothing."""
     if build:
         print("  builds first (not in a dry run): every flavor per board")
+    else:
+        print("  builds nothing: the kernels installed already")
     for board in info["boards"]:
         for sub in info["submissions"]:
             dry_run_board(board_args(board, sub, info["round"]), system_config,
@@ -251,7 +254,7 @@ def cmd_round_start(args, system_config, machine_config, kernel_config):
     warnings = checkout_warnings(fetch=not args.dry_run) + disk_warnings(system_config)
     for w in warnings:
         print(f"warning: {w}")
-    build = getattr(args, "build", False)
+    build = not getattr(args, "skip_build", False)
     if args.dry_run:
         dry_run(info, build, system_config, machine_config, kernel_config)
         return

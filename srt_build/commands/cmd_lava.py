@@ -59,7 +59,7 @@ def build_flavor(ctx, fl, kernel_config):
     """Build a specific flavor if not skipped.
 
     A failed build stops: its jobs would boot the kernel installed
-    before. ctx.args.built (round start --build) is the set of flavors
+    before. ctx.args.built (round start) is the set of flavors
     built already for the board, each is built once.
     """
     if ctx.args.skip_build:
