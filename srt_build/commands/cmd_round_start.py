@@ -214,10 +214,21 @@ def dry_run_board(ctx_args, system_config, machine_config, kernel_config):
         print(f"  would submit: {e['board']} {e['flavor']} {e['test']}")
 
 
+def submission_command(sub):
+    """The lava command of an entry of submissions, as typed."""
+    words = ["lava --skip-build"]
+    for k, v in sub.items():
+        if isinstance(v, list):
+            v = ",".join(map(str, v))
+        words.append(f"--{k}" if v is True else f"--{k} {v}")
+    return " ".join(words)
+
+
 def build_board(board, subs, rid, system_config, machine_config, kernel_config):
     """Build and install every flavor of the board's submissions, once."""
     from .cmd_lava import cmd_lava
 
+    print(f"{board}: building")
     built = set()
     for sub in subs:
         ctx_args = board_args(board, sub, rid)
@@ -247,14 +258,14 @@ def cmd_round_start(args, system_config, machine_config, kernel_config):
     rid, subs = info["round"], info["submissions"]
     print(f"round {rid} ({info['kind']}) on {info['lava']}: srt-build "
           f"{info['srt_build']}, kernel {info['kernel']}")  # fmt: skip
-    print(f"  boards {', '.join(info['boards'])}; per board: " + "; ".join(
-        "lava --skip-build " + " ".join(f"--{k} {v}" for k, v in s.items())
-        for s in subs
-    ))  # fmt: skip
+    build = not getattr(args, "skip_build", False)
+    print(f"  boards {', '.join(info['boards'])}")
+    print("  per board: " + ("build and install every flavor, then " if build
+                             else "the installed kernels, ")
+          + "; ".join(submission_command(s) for s in subs))  # fmt: skip
     warnings = checkout_warnings(fetch=not args.dry_run) + disk_warnings(system_config)
     for w in warnings:
         print(f"warning: {w}")
-    build = not getattr(args, "skip_build", False)
     if args.dry_run:
         dry_run(info, build, system_config, machine_config, kernel_config)
         return

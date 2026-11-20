@@ -275,3 +275,17 @@ def test_lavacli_that_does_not_run(monkeypatch, tmp_path, caplog):
         helpers.ensure_lavacli_available()
     assert "does not run (ModuleNotFoundError" in caplog.text
     assert "pipx reinstall lavacli" in caplog.text
+
+
+def test_header(lab, capsys):
+    start(lab, dry_run=True, skip_build=False)
+    out = capsys.readouterr().out
+    assert (
+        "  per board: build and install every flavor, then lava --skip-build; "
+        "lava --skip-build --flavors rt --testsuites stress-ng-class" in out
+    )
+    start(lab, dry_run=True)
+    assert "per board: the installed kernels, lava" in capsys.readouterr().out
+    assert cmd_round_start.submission_command({"split": True}) == (
+        "lava --skip-build --split"
+    )
