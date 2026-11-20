@@ -19,8 +19,8 @@ builds and installs them and submits the round, in one go.
 .. code-block:: console
 
   $ cd ~/rt/v6.12-rt
-  $ srt-build round start --build --dry-run --notes "v6.12.118-rt24"
-  $ srt-build round start --build --notes "v6.12.118-rt24"
+  $ srt-build round start --build --dry-run
+  $ srt-build round start --build
 
 ``--build`` builds every flavor the round uses on each board of ``rounds:
 boards`` in ``config.yml``, each once, and installs the kernels where the
@@ -29,8 +29,10 @@ build that fails stops ``round start`` with nothing submitted and no round
 in the archive. Then ``round start`` submits, per board, one ``lava
 --skip-build`` per entry of ``rounds: submissions`` (the smoke tests of
 every flavor, the stress-ng classes of ``rt``). The round gets the next
-number (``13``) and records the kernel (``git describe``), the srt-build
-commit and every job. The builds take a while: run it in a ``tmux`` or
+number (``13``) and records the kernel (``git describe``, e.g.
+``v6.12.118-rt24``), the srt-build commit and every job; ``round list``
+shows the kernel. ``--notes`` is only for what the kernel doesn't tell,
+e.g. ``--notes "bbb on a new power supply"``. The builds take a while: run it in a ``tmux`` or
 ``screen`` session.
 
 Without ``--build``, ``round start`` submits with the kernels installed
