@@ -14,21 +14,36 @@ from .report import KNOWN_KERNEL_WARNINGS
 
 def ensure_lavacli_available():
     """
-    Verify that 'lavacli' is available in PATH.
+    Verify that 'lavacli' is in PATH and runs.
 
-    Exit with error if not found.
-    Required for LAVA-related commands.
+    Exit with error if not. Required for LAVA-related commands.
+    A lavacli that stopped running (e.g. installed with pip for a Python
+    the distribution has since replaced) fails here, before any build.
     """
-    if shutil.which("lavacli") is None:
-        from logging import warning
+    hint = (
+        "- Via pipx (recommended): pipx install lavacli "
+        "(pipx reinstall lavacli after a Python upgrade)\n"
+        "- Via pip: pip install lavacli\n"
+        "Refer to https://docs.lavasoftware.org/lava/lavacli.html"
+    )
+    from logging import warning
 
+    if shutil.which("lavacli") is None:
         warning(
             "'lavacli' command not found. "
-            "Please install it to use LAVA-related commands.\n"
-            "- Via pipx (recommended): pipx install lavacli\n"
-            "- Via pip: pip install lavacli\n"
-            "Refer to https://docs.lavasoftware.org/lava/lavacli.html"
+            "Please install it to use LAVA-related commands.\n" + hint
         )
+        sys.exit(1)
+    try:
+        r = subprocess.run(
+            ["lavacli", "--version"], capture_output=True, text=True, timeout=60
+        )
+        ok, out = r.returncode == 0, (r.stderr or r.stdout).strip()
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        ok, out = False, str(exc)
+    if not ok:
+        last = out.splitlines()[-1] if out else "no output"
+        warning(f"'lavacli' does not run ({last}). Reinstall it:\n" + hint)
         sys.exit(1)
 
 
@@ -453,7 +468,7 @@ def prepare_build_for_flavor(ctx, fl):
     """Prepare build settings for specific flavor."""
     ctx.args.dest = "lava"
     ctx.args.postfix = "-" + fl
-    (res, ref) = run_cmd(["git", "describe"])
+    res, ref = run_cmd(["git", "describe"])
     if not res:
         ctx.kernel_describe = ref.strip()
         ctx.args.postfix += "-" + ctx.kernel_describe
@@ -468,7 +483,7 @@ def get_testpath(ctx, fl):
 
 
 def _submit(path, jobs):
-    (_, res) = run_cmd(["lavacli", "jobs", "submit", path])
+    _, res = run_cmd(["lavacli", "jobs", "submit", path])
     jobs.append(str(res).strip())
 
 

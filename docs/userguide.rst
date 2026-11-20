@@ -21,7 +21,12 @@ Prerequisites
 
 - A LAVA server with the boards, and a lavacli identity for it in
   ``~/.config/lavacli.yaml`` (identity ``default``): srt-build finds LAVA's
-  REST and XML-RPC API through it. lavacli itself needn't be installed.
+  REST and XML-RPC API through it.
+- lavacli, which submits the jobs of ``lava`` and ``round start``:
+  ``pipx install lavacli``. After a Python upgrade of the distribution a
+  lavacli installed with pip may no longer run (``No module named
+  'lavacli'``): ``pipx reinstall lavacli`` or ``python3 -m pip install
+  --user lavacli``. srt-build checks that it runs before it builds.
 - The cross compilers of the boards (``CROSS_COMPILE`` in ``config.yml``,
   e.g. ``arm-linux-gnu-``) and what a kernel build needs.
 - ssh access to where the boards boot their kernels from (the ``install``
