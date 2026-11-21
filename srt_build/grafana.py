@@ -709,9 +709,11 @@ def by_kind(expr, label):
     return f'label_replace({line}, "n", "$1", "round", "t?([0-9]+)")'
 
 
-# The normal range: mean +- BAND_SIGMAS standard deviations of the
-# release rounds' max latency, a band behind the line.
-BAND_SIGMAS = 2
+# The normal range: the median of the release rounds' max latency +-
+# BAND_K robust standard deviations (1.4826 x the median absolute
+# deviation, MAD), a band behind the line. Median and MAD: one wild
+# round (round 11's 185 ms) barely moves the band, it shows outside.
+BAND_K = 3
 
 
 def band_overrides(color="green"):
@@ -782,15 +784,16 @@ def build_detail(lava_url):
         '{stat="max", board="$board", flavor="$flavor", test="$test", '
         f'kernel=~"$kernel", {WL}, {RELEASE}}}[$__range]))'
     )
-    mean, sd = f"avg({REF})", f"stddev({REF})"
+    median = f"quantile(0.5, {REF})"
+    sd = f"(1.4826 * quantile(0.5, abs({REF} - scalar({median}))))"
     d.round_trend(
         "Max latency and normal range",
         by_kind(
             "label_set(max by (round, round_kind) (max_over_time(srt_latency_us"
             f'{{stat="max", {BYROUND}}}[$__range])), "series", "max")'
-            f" or label_set({REF} * 0 + scalar({mean} + {BAND_SIGMAS} * {sd}), "
+            f" or label_set({REF} * 0 + scalar({median} + {BAND_K} * {sd}), "
             '"series", "upper")'
-            f" or label_set(clamp_min({REF} * 0 + scalar({mean} - {BAND_SIGMAS} * "
+            f" or label_set(clamp_min({REF} * 0 + scalar({median} - {BAND_K} * "
             f'{sd}), 0), "series", "lower")',
             "series",
         ),
@@ -802,9 +805,10 @@ def build_detail(lava_url):
         log=False,
         overrides=band_overrides(),
         desc="Max latency of each round (all threads and workloads chosen), "
-        f"in front of the normal range: the mean +- {BAND_SIGMAS} standard "
-        "deviations of the release rounds shown. A round outside the band "
-        "is worth a look; with few rounds the band is rough.",
+        f"in front of the normal range: the median +- {BAND_K} robust standard "
+        "deviations (1.4826 x MAD) of the release rounds shown; one wild "
+        "round barely moves it. A round outside the band is worth a look; "
+        "with few rounds the band is rough.",
     )
     d.y += 8
     d.round_trend(

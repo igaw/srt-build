@@ -264,14 +264,14 @@ def test_detail_problems_of_the_jobs_with_the_test():
 
 
 def test_normal_range_band():
-    """The max per round in front of a band: mean +- 2 standard
+    """The max per round in front of a band: median +- 3 robust standard
     deviations of the release rounds, filled between upper and lower."""
     d = ALL["rt-test-detail.json"]
     (p,) = [p for p in d["panels"] if p["title"] == "Max latency and normal range"]
     expr = p["targets"][0]["expr"]
     for name in ("max", "upper", "lower"):
         assert f'"series", "{name}")' in expr
-    assert "stddev(" in expr and "clamp_min(" in expr
+    assert "quantile(0.5, abs(" in expr and "clamp_min(" in expr
     assert 'round_kind="release"' in expr  # the reference: release rounds
     over = {
         o["matcher"]["options"]: o["properties"] for o in p["fieldConfig"]["overrides"]
