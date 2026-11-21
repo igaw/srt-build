@@ -17,11 +17,14 @@ the JSON.
                        rounds as lines of their own, "(test)", t5 at
                        x 5), one round's histogram and threads, the
                        rounds, jobs, problems and kernels.
+  rt-rounds-compared.json "RT rounds compared": two rounds (release or
+                       test, chosen at the top) side by side, a bar
+                       per board, test and workload.
 
 `round export` labels the samples with round and round_kind. The round
 trends use Grafana's Trend panel (Grafana 10 or later): the round, a
 label, becomes the x value, so only release rounds (numbers) go into
-the overview's; test rounds (t3) are compared in the two-round bars and
+the overview's; test rounds (t3) are compared in RT rounds compared and
 can be picked as the round in depth. The detail's trends follow the
 round kind: by_kind gives each round a number label n and test rounds
 their own lines. The round_kind variable (release by default)
@@ -39,6 +42,7 @@ round. Time is no axis: when a round ran is in the Rounds table.
 DS = {"type": "prometheus", "uid": "victoriametrics"}
 OVERVIEW_UID = "rt-tests"
 DETAIL_UID = "rt-test-detail"
+COMPARE_UID = "rt-rounds-compared"
 
 # Samples of the chosen round kinds, and those without round (jobs
 # export): "" matches a missing label.
@@ -572,19 +576,6 @@ def build_overview(lava_url):
     p["links"] = [{"title": "Details", "url": detail_url("$board", None, "$test")}]
     d.y += 6
 
-    d.row("Two rounds")
-    d.round_bars(
-        "Round $round_a and $round_b",
-        ["$round_a", "$round_b"],
-        'flavor=~"$flavor", board=~"$board", test=~"$test", ' + WL + ", " + ROUNDS,
-        0,
-        24,
-        12,
-        desc="Max latency per board and test in each of the two rounds chosen "
-        "at the top.",
-    )
-    d.y += 12
-
     return _dashboard(
         OVERVIEW_UID,
         "RT tests",
@@ -607,22 +598,62 @@ def build_overview(lava_url):
             ),
             _workload_var('board=~"$board", flavor=~"$flavor", test=~"$test"'),
             _round_kind_var(),
-            _var(
-                "round_a",
-                "label_values(srt_job_ok{" + ROUNDS + "}, round)",
-                False,
-                False,
-                sort=4,
-            ),
-            _var(
-                "round_b",
-                "label_values(srt_job_ok{" + ROUNDS + "}, round)",
-                False,
-                False,
-                sort=4,
-            ),
         ],
-        [{"title": "RT test detail", "url": f"/d/{DETAIL_UID}", "type": "link"}],
+        LINKS,
+        since="now-1y",
+    )
+
+
+# The dashboards link to each other (at the top, next to the selectors).
+LINKS = [
+    {"title": "RT tests", "url": f"/d/{OVERVIEW_UID}", "type": "link"},
+    {"title": "RT test detail", "url": f"/d/{DETAIL_UID}", "type": "link"},
+    {"title": "RT rounds compared", "url": f"/d/{COMPARE_UID}", "type": "link"},
+]
+
+
+def build_compare(lava_url):
+    """Two rounds side by side as a dict: its own dashboard, so the
+    round A and B selectors sit above what they choose."""
+    d = Dashboard(lava_url)
+    d.row("Round $round_a and round $round_b")
+    d.round_bars(
+        "Round $round_a and $round_b",
+        ["$round_a", "$round_b"],
+        'flavor=~"$flavor", board=~"$board", test=~"$test", ' + WL,
+        0,
+        24,
+        20,
+        desc="Max latency per board, test and workload in each of the two "
+        "rounds chosen at the top (round kind: which rounds they offer).",
+    )
+    d.y += 20
+    rounds = "label_values(srt_job_ok{" + ROUNDS + "}, round)"
+    kind = _round_kind_var()
+    kind["current"] = {"text": "All", "value": "$__all"}
+    for o in kind["options"]:
+        o["selected"] = False
+    return _dashboard(
+        COMPARE_UID,
+        "RT rounds compared",
+        "Two PREEMPT_RT rounds, release or test, side by side: the max "
+        "latency per board, test and workload.",
+        lava_url,
+        d.panels,
+        [
+            kind,
+            {**_var("round_a", rounds, False, False, sort=4), "label": "round A"},
+            {**_var("round_b", rounds, False, False, sort=4), "label": "round B"},
+            _var("board", "label_values(srt_job_ok, board)"),
+            _var("flavor", 'label_values(srt_job_ok{board=~"$board"}, flavor)'),
+            _var(
+                "test",
+                'label_values(srt_latency_us{board=~"$board", flavor=~"$flavor"}, '
+                "test)",
+            ),
+            _workload_var('board=~"$board", flavor=~"$flavor", test=~"$test"'),
+        ],
+        LINKS,
         since="now-1y",
     )
 
@@ -842,12 +873,16 @@ def build_detail(lava_url):
                 sort=4,
             ),
         ],
-        [{"title": "RT tests", "url": f"/d/{OVERVIEW_UID}", "type": "link"}],
+        LINKS,
         since="now-1y",
     )
 
 
-DASHBOARDS = {"rt-tests.json": build_overview, "rt-test-detail.json": build_detail}
+DASHBOARDS = {
+    "rt-tests.json": build_overview,
+    "rt-test-detail.json": build_detail,
+    "rt-rounds-compared.json": build_compare,
+}
 
 
 def build_all(lava_url):

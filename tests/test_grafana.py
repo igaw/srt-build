@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from srt_build.grafana import DETAIL_UID, OVERVIEW_UID, build_all, queries
+from srt_build.grafana import COMPARE_UID, DETAIL_UID, OVERVIEW_UID, build_all, queries
 
 ALL = build_all("http://lava.example:10070")
 DASHBOARDS = list(ALL.values())
@@ -24,8 +24,12 @@ LABELS |= {"workload", "series"}
 
 
 def test_files():
-    assert set(ALL) == {"rt-tests.json", "rt-test-detail.json"}
-    assert {d["uid"] for d in DASHBOARDS} == {OVERVIEW_UID, DETAIL_UID}
+    assert set(ALL) == {
+        "rt-tests.json",
+        "rt-test-detail.json",
+        "rt-rounds-compared.json",
+    }
+    assert {d["uid"] for d in DASHBOARDS} == {OVERVIEW_UID, DETAIL_UID, COMPARE_UID}
 
 
 @pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
@@ -109,13 +113,30 @@ def test_rounds_on_the_x_axis():
     props = {x["id"]: x["value"] for x in o["properties"]}
     assert props["unit"] == "none" and props["decimals"] == 0
     assert props["custom.scaleDistribution"] == {"type": "linear"}
+    assert not [p for p in d["panels"] if p["type"] == "barchart"]
+
+
+def test_two_rounds_on_their_own():
+    """The two-round bars are a dashboard of their own, round A and B at
+    its top; the overview has no round selectors any more."""
+    names = lambda d: [v["name"] for v in d["templating"]["list"]]  # noqa: E731
+    assert "round_a" not in names(ALL["rt-tests.json"])
+    d = ALL["rt-rounds-compared.json"]
+    assert names(d)[:3] == ["round_kind", "round_a", "round_b"]
+    kind = d["templating"]["list"][0]
+    assert kind["current"]["value"] == "$__all"  # release and test rounds
     (bars,) = [p for p in d["panels"] if p["type"] == "barchart"]
     assert [t["legendFormat"] for t in bars["targets"]] == ["$round_a", "$round_b"]
     for t in bars["targets"]:
         assert '"key", " ", "board", "test", "workload")' in t["expr"]
+    for x in DASHBOARDS:
+        urls = {link["url"] for link in x["links"]}
+        assert {f"/d/{u}" for u in (OVERVIEW_UID, DETAIL_UID, COMPARE_UID)} <= urls
 
 
-@pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
+@pytest.mark.parametrize(
+    "d", [d for d in DASHBOARDS if d["uid"] != COMPARE_UID], ids=lambda d: d["uid"]
+)
 def test_release_rounds_by_default(d):
     """Test rounds stay out unless chosen; samples without a round
     (jobs export) stay in. The overview's round trends: release rounds
