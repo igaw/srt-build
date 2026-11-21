@@ -65,7 +65,8 @@ def test_variables_used_are_defined(d):
     texts += ["$" + p["repeat"] for p in d["panels"] if p.get("repeat")]
     for text in texts:
         for var in re.findall(r"\$(\w+)", text):
-            if not var.startswith("__"):
+            # $1: label_replace's group, Grafana leaves unknown names
+            if not var.startswith("__") and not var.isdigit():
                 assert var in names, text
 
 
@@ -117,15 +118,19 @@ def test_rounds_on_the_x_axis():
 @pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
 def test_release_rounds_by_default(d):
     """Test rounds stay out unless chosen; samples without a round
-    (jobs export) stay in. The round trends: release rounds only."""
+    (jobs export) stay in. The overview's round trends: release rounds
+    only; the detail's follow the round kind (by_kind)."""
     (v,) = [v for v in d["templating"]["list"] if v["name"] == "round_kind"]
     assert v["current"]["value"] == "release"
     for p in d["panels"]:
         for t in p.get("targets", []):
-            if p["type"] == "trend":
+            if p["type"] == "trend" and d["uid"] == OVERVIEW_UID:
                 assert 'round_kind="release"' in t["expr"], p["title"]
             else:
                 assert "round_kind=~" in t["expr"], p["title"]
+            if p["type"] == "trend" and d["uid"] == DETAIL_UID:
+                assert '"n", "$1", "round", "t?([0-9]+)"' in t["expr"], p["title"]
+                assert p["transformations"][0]["options"]["rowField"] == "n"
 
 
 @pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])

@@ -12,15 +12,19 @@ the JSON.
                        (release or test rounds). A click on a trend
                        opens:
   rt-test-detail.json  "RT test detail": one board, flavor and test.
-                       Per thread and percentiles over the release
-                       rounds, one round's histogram and threads, the
+                       Per thread and percentiles over the rounds of
+                       the chosen kinds (release by default; test
+                       rounds as lines of their own, "(test)", t5 at
+                       x 5), one round's histogram and threads, the
                        rounds, jobs, problems and kernels.
 
 `round export` labels the samples with round and round_kind. The round
 trends use Grafana's Trend panel (Grafana 10 or later): the round, a
-label, becomes the x value, so only release rounds (numbers) go there;
-test rounds (t3) are compared in the two-round bars and can be picked
-as the round in depth. The round_kind variable (release by default)
+label, becomes the x value, so only release rounds (numbers) go into
+the overview's; test rounds (t3) are compared in the two-round bars and
+can be picked as the round in depth. The detail's trends follow the
+round kind: by_kind gives each round a number label n and test rounds
+their own lines. The round_kind variable (release by default)
 keeps test rounds out of everything else unless chosen; samples
 without the label (jobs outside the archive) still count in the tables.
 The workload variable picks the background load (idle, hackbench,
@@ -272,12 +276,15 @@ class Dashboard:
             options=options,
         )
 
-    def round_trend(self, title, expr, series, x, w, h, desc="", log=True, **extra):
+    def round_trend(
+        self, title, expr, series, x, w, h, desc="", log=True, row="round", **extra
+    ):
         """Grafana's Trend panel: the round on the x axis, a line per
         value of label series. An instant query over the dashboard's
         range gives a row per round and series; the matrix makes a
-        column per series, and round (a label, text) becomes a number
-        for the x axis. Test rounds (t3) aren't numbers: release only."""
+        column per series, and label row (round, a text) becomes a
+        number for the x axis. Test rounds (t3) aren't numbers: release
+        only, unless the query makes a number label (by_kind) for row."""
         return self._panel(
             "trend",
             title,
@@ -290,14 +297,14 @@ class Dashboard:
                 {
                     "id": "groupingToMatrix",
                     "options": {
-                        "rowField": "round",
+                        "rowField": row,
                         "columnField": series,
                         "valueField": "Value",
                     },
                 },
                 {
                     "id": "organize",
-                    "options": {"renameByName": {f"round\\{series}": "Round"}},
+                    "options": {"renameByName": {f"{row}\\{series}": "Round"}},
                 },
                 {
                     "id": "convertFieldType",
@@ -620,30 +627,46 @@ def build_overview(lava_url):
     )
 
 
+def by_kind(expr, label):
+    """For a round trend of the round kinds chosen: expr has the labels
+    round, round_kind and label. Adds n, the round's number (t5: 5) for
+    the x axis, and line, label's value, with " (test)" for a test
+    round: test rounds are lines of their own, release rounds look as
+    before."""
+    kt = f'label_join({expr}, "kt", ";", "round_kind", "{label}")'
+    line = (
+        f'label_replace(label_replace({kt}, "line", "$1", "kt", "release;(.*)"), '
+        '"line", "$1 (test)", "kt", "test;(.*)")'
+    )
+    return f'label_replace({line}, "n", "$1", "round", "t?([0-9]+)")'
+
+
 def build_detail(lava_url):
     """The detail dashboard (one board, flavor and test) as a dict: the
-    release rounds side by side, and one round in depth."""
+    rounds of the chosen kinds side by side, and one round in depth."""
     d = Dashboard(lava_url)
-    # The round trends: release rounds only, their round is a number.
+    # The round trends: the rounds of the kinds chosen at the top
+    # (release by default); by_kind makes their x axis and lines.
     BYROUND = (
         'board="$board", flavor="$flavor", test="$test", kernel=~"$kernel", '
         + WL
         + ", "
-        + RELEASE
+        + ROUNDS
     )
     # The round shown in depth.
     ROUND = ONE + ', round="$round"'
     detail = ("$board", "$flavor", "$test")
 
     def per_round(stat, by):
-        return (
-            f"max by (round, {by}) (max_over_time(srt_latency_us"
-            f'{{stat="{stat}", {BYROUND}}}[$__range]))'
+        return by_kind(
+            f"max by (round, round_kind, {by}) (max_over_time(srt_latency_us"
+            f'{{stat="{stat}", {BYROUND}}}[$__range]))',
+            by,
         )
 
     def quantile(q, name):
         return (
-            f"label_set(histogram_quantile({q}, sum by (round, le) "
+            f"label_set(histogram_quantile({q}, sum by (round, round_kind, le) "
             f"(max_over_time(srt_latency_bucket{{{BYROUND}}}[$__range]))), "
             f'"series", "{name}")'
         )
@@ -652,27 +675,38 @@ def build_detail(lava_url):
     d.round_trend(
         "Max latency per thread",
         per_round("max", "thread"),
-        "thread",
+        "line",
         0,
         12,
         9,
-        desc="Max latency of each thread in each release round. t: thread "
+        row="n",
+        desc="Max latency of each thread in each round of the kinds chosen at "
+        "the top (a test round's lines say (test), its x is its number: t5 at "
+        "5). t: thread "
         "(cyclictest: thread index, rtla: CPU), i: rtla's IRQ, u: rtla's "
         "user-space thread. Log scale.",
     )
     d.round_trend(
         "Percentiles (all threads)",
-        " or ".join(
-            [quantile(q, n) for q, n in ((0.5, "p50"), (0.99, "p99"), (0.999, "p99.9"))]
-            + [
-                'label_set(max by (round) (max_over_time(srt_latency_us{stat="max", '
-                f'{BYROUND}}}[$__range])), "series", "max")'
-            ]
+        by_kind(
+            " or ".join(
+                [
+                    quantile(q, n)
+                    for q, n in ((0.5, "p50"), (0.99, "p99"), (0.999, "p99.9"))
+                ]
+                + [
+                    "label_set(max by (round, round_kind) (max_over_time("
+                    f'srt_latency_us{{stat="max", {BYROUND}}}[$__range])), '
+                    '"series", "max")'
+                ]
+            ),
+            "series",
         ),
-        "series",
+        "line",
         12,
         12,
         9,
+        row="n",
         desc="From the uploaded histograms (cyclictest, rtla), all threads of "
         "a round together; estimated within the bucket (5, 10, 20, 30, 50, 75, "
         "100, 150, 200, 300, 500, 750, 1000, 2000 us). max: the test's own "
@@ -682,11 +716,12 @@ def build_detail(lava_url):
     d.round_trend(
         "Average latency per thread",
         per_round("avg", "thread"),
-        "thread",
+        "line",
         0,
         12,
         9,
         log=False,
+        row="n",
     )
     d.table(
         "Rounds",
