@@ -269,7 +269,7 @@ def test_normal_range_band():
     d = ALL["rt-test-detail.json"]
     (p,) = [p for p in d["panels"] if p["title"] == "Max latency and normal range"]
     expr = p["targets"][0]["expr"]
-    for name in ("max", "upper", "lower"):
+    for name in ("max", "upper", "lower", "outside"):
         assert f'"series", "{name}")' in expr
     assert "quantile(0.5, abs(" in expr and "clamp_min(" in expr
     assert 'round_kind="release"' in expr  # the reference: release rounds
@@ -278,3 +278,6 @@ def test_normal_range_band():
     }
     assert {"id": "custom.fillBelowTo", "value": "lower"} in over["upper"]
     assert {"id": "custom.lineWidth", "value": 0} in over["lower"]
+    assert {"id": "custom.drawStyle", "value": "points"} in over["outside.*"]
+    # log scale: the band stays visible next to a wild round
+    assert p["fieldConfig"]["defaults"]["custom"]["scaleDistribution"]["type"] == "log"

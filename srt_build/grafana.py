@@ -747,6 +747,21 @@ def band_overrides(color="green"):
     ]
 
 
+def outside_override():
+    """The rounds outside the band (series outside, a test round's
+    "outside (test)"): big red points, no line."""
+    return {
+        "matcher": {"id": "byRegexp", "options": "outside.*"},
+        "properties": [
+            {"id": "custom.drawStyle", "value": "points"},
+            {"id": "custom.pointSize", "value": 12},
+            {"id": "custom.showPoints", "value": "always"},
+            {"id": "custom.spanNulls", "value": False},
+            {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+        ],
+    }
+
+
 def build_detail(lava_url):
     """The detail dashboard (one board, flavor and test) as a dict: the
     rounds of the chosen kinds side by side, and one round in depth."""
@@ -786,15 +801,22 @@ def build_detail(lava_url):
     )
     median = f"quantile(0.5, {REF})"
     sd = f"(1.4826 * quantile(0.5, abs({REF} - scalar({median}))))"
+    upper = f"scalar({median} + {BAND_K} * {sd})"
+    # at least 1 us: the axis is logarithmic
+    lower = f"scalar(clamp_min({median} - {BAND_K} * {sd}, 1))"
+    MAX = (
+        "max by (round, round_kind) (max_over_time(srt_latency_us"
+        f'{{stat="max", {BYROUND}}}[$__range]))'
+    )
     d.round_trend(
         "Max latency and normal range",
         by_kind(
-            "label_set(max by (round, round_kind) (max_over_time(srt_latency_us"
-            f'{{stat="max", {BYROUND}}}[$__range])), "series", "max")'
-            f" or label_set({REF} * 0 + scalar({median} + {BAND_K} * {sd}), "
-            '"series", "upper")'
-            f" or label_set(clamp_min({REF} * 0 + scalar({median} - {BAND_K} * "
-            f'{sd}), 0), "series", "lower")',
+            f'label_set({MAX}, "series", "max")'
+            f' or label_set({REF} * 0 + {upper}, "series", "upper")'
+            f' or label_set({REF} * 0 + {lower}, "series", "lower")'
+            # the rounds outside the band once more: red points
+            f" or label_set(({MAX} > {upper}) or ({MAX} < {lower}), "
+            '"series", "outside")',
             "series",
         ),
         "line",
@@ -802,13 +824,12 @@ def build_detail(lava_url):
         24,
         8,
         row="n",
-        log=False,
-        overrides=band_overrides(),
+        overrides=band_overrides() + [outside_override()],
         desc="Max latency of each round (all threads and workloads chosen), "
         f"in front of the normal range: the median +- {BAND_K} robust standard "
         "deviations (1.4826 x MAD) of the release rounds shown; one wild "
-        "round barely moves it. A round outside the band is worth a look; "
-        "with few rounds the band is rough.",
+        "round barely moves it. A round outside the band is a red point, "
+        "worth a look; with few rounds the band is rough. Log scale.",
     )
     d.y += 8
     d.round_trend(
