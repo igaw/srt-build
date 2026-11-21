@@ -500,6 +500,36 @@ def _dashboard(
     }
 
 
+def band(ref):
+    """(upper, lower) of the normal range of ref (max latency per round,
+    label round): scalars, the median +- BAND_K robust standard
+    deviations (1.4826 x MAD), but at least +- BAND_MIN of the median
+    and BAND_MIN_US: rounds alike to the microsecond (c2d: 11, 12, 12)
+    have a MAD of 0, and a few rounds give a narrow, unsteady MAD. lower
+    at least 1 us (log axes)."""
+    median = f"quantile(0.5, {ref})"
+    sd = f"(1.4826 * quantile(0.5, abs({ref} - scalar({median}))))"
+    least = f"scalar(clamp_min({BAND_MIN} * {median}, {BAND_MIN_US}))"
+    half = f"clamp_min({BAND_K} * {sd}, {least})"
+    return (
+        f"scalar({median} + {half})",
+        f"scalar(clamp_min({median} - {half}, 1))",
+    )
+
+
+def band_series(ref, value):
+    """The band's series for a round trend: upper and lower on every
+    round of ref, and outside: the rounds whose value (same labels as
+    ref) lies above it, drawn as red points (outside_override). Below
+    the band is better, not a problem."""
+    upper, lower = band(ref)
+    return (
+        f' or label_set({ref} * 0 + {upper}, "series", "upper")'
+        f' or label_set({ref} * 0 + {lower}, "series", "lower")'
+        f' or label_set({value} > {upper}, "series", "outside")'
+    )
+
+
 def build_overview(lava_url):
     """The overview dashboard as a dict."""
     d = Dashboard(lava_url)
@@ -512,18 +542,27 @@ def build_overview(lava_url):
         + ", "
         + RELEASE
     )
+    # the band: of the max over the lines shown (flavors, workloads)
+    top = (
+        "max by (round) (max_over_time("
+        f'srt_latency_us{{stat="max", {by_round}}}[$__range]))'
+    )
     p = d.round_trend(
         "$test",
         "label_join(max by (round, flavor, workload) (max_over_time("
         f'srt_latency_us{{stat="max", {by_round}}}[$__range])), '
-        '"series", " ", "flavor", "workload")',
+        '"series", " ", "flavor", "workload")' + band_series(top, top),
         "series",
         0,
         4,
         6,
+        overrides=band_overrides() + [outside_override()],
         desc="Max latency of each release round (largest of its jobs and "
         "threads), the round on the x axis, a line per flavor and workload; "
-        "log scale. The title's link opens the test over time, in detail.",
+        "log scale. Green: the normal range of the largest of them (median "
+        f"+- {BAND_K} x 1.4826 x MAD of the rounds shown, at least +- "
+        f"{BAND_MIN:.0%} and {BAND_MIN_US} us), red: a round above it. The "
+        "title's link opens the test over time, in detail.",
         repeat="test",
         repeatDirection="h",
         maxPerRow=6,
@@ -714,6 +753,11 @@ def by_kind(expr, label):
 # deviation, MAD), a band behind the line. Median and MAD: one wild
 # round (round 11's 185 ms) barely moves the band, it shows outside.
 BAND_K = 3
+# The band's least half width: of the median, and in microseconds;
+# doc/TUNING.md: only a change beyond about 40 % and 20 us is worth a
+# look. With more rounds the MAD alone will do.
+BAND_MIN = 0.4
+BAND_MIN_US = 20
 
 
 def band_overrides(color="green"):
@@ -799,11 +843,6 @@ def build_detail(lava_url):
         '{stat="max", board="$board", flavor="$flavor", test="$test", '
         f'kernel=~"$kernel", {WL}, {RELEASE}}}[$__range]))'
     )
-    median = f"quantile(0.5, {REF})"
-    sd = f"(1.4826 * quantile(0.5, abs({REF} - scalar({median}))))"
-    upper = f"scalar({median} + {BAND_K} * {sd})"
-    # at least 1 us: the axis is logarithmic
-    lower = f"scalar(clamp_min({median} - {BAND_K} * {sd}, 1))"
     MAX = (
         "max by (round, round_kind) (max_over_time(srt_latency_us"
         f'{{stat="max", {BYROUND}}}[$__range]))'
@@ -811,12 +850,7 @@ def build_detail(lava_url):
     d.round_trend(
         "Max latency and normal range",
         by_kind(
-            f'label_set({MAX}, "series", "max")'
-            f' or label_set({REF} * 0 + {upper}, "series", "upper")'
-            f' or label_set({REF} * 0 + {lower}, "series", "lower")'
-            # the rounds outside the band once more: red points
-            f" or label_set(({MAX} > {upper}) or ({MAX} < {lower}), "
-            '"series", "outside")',
+            f'label_set({MAX}, "series", "max")' + band_series(REF, MAX),
             "series",
         ),
         "line",
@@ -827,9 +861,10 @@ def build_detail(lava_url):
         overrides=band_overrides() + [outside_override()],
         desc="Max latency of each round (all threads and workloads chosen), "
         f"in front of the normal range: the median +- {BAND_K} robust standard "
-        "deviations (1.4826 x MAD) of the release rounds shown; one wild "
-        "round barely moves it. A round outside the band is a red point, "
-        "worth a look; with few rounds the band is rough. Log scale.",
+        "deviations (1.4826 x MAD) of the release rounds shown, at least +- "
+        f"{BAND_MIN:.0%} and {BAND_MIN_US} us; one wild round barely moves "
+        "it. A round above the band is a red point, worth a look; with few "
+        "rounds the band is rough. Log scale.",
     )
     d.y += 8
     d.round_trend(

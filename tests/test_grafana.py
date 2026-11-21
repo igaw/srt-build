@@ -117,8 +117,12 @@ def test_rounds_on_the_x_axis():
     }
     assert p["options"]["xField"] == "Round"
     # The latencies' unit and log scale stay off the x axis.
-    (o,) = p["fieldConfig"]["overrides"]
+    o, *band = p["fieldConfig"]["overrides"]
     assert o["matcher"] == {"id": "byName", "options": "Round"}
+    # the normal range behind the lines, rounds outside it red
+    assert [x["matcher"]["options"] for x in band] == ["upper", "lower", "outside.*"]
+    for name in ("upper", "lower", "outside"):
+        assert f'"series", "{name}")' in t["expr"]
     props = {x["id"]: x["value"] for x in o["properties"]}
     assert props["unit"] == "none" and props["decimals"] == 0
     assert props["custom.scaleDistribution"] == {"type": "linear"}
