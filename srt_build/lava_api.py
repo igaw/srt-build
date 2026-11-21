@@ -12,6 +12,8 @@ http://host:port/api/v0.2/.
 
 import json
 import os
+import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -49,13 +51,29 @@ class LavaApi:
             token = token or ident_token
         return cls(base, token)
 
+    RETRY = (5, 15, 30, 60)  # seconds between the tries of a request
+
     def _open(self, url):
+        """GET url; LAVA (or its proxy) failing for a moment, 502/503/504
+        or no connection, is tried again: every request is a read."""
         if not url.startswith("http"):
             url = self.base + url
         req = urllib.request.Request(url)
         if self.token:
             req.add_header("Authorization", f"Token {self.token}")
-        return urllib.request.urlopen(req, timeout=self.timeout)
+        for wait in (*self.RETRY, None):
+            try:
+                return urllib.request.urlopen(req, timeout=self.timeout)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (502, 503, 504) or wait is None:
+                    raise
+                err = exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                if wait is None:
+                    raise
+                err = exc
+            print(f"LAVA: {err}, again in {wait} s", file=sys.stderr)
+            time.sleep(wait)
 
     def get_json(self, url):
         with self._open(url) as r:

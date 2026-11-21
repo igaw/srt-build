@@ -105,9 +105,13 @@ def cmd_round_wait(args, system_config, machine_config, sleep=time.sleep):
     while True:
         info = load_round(archive, rid)  # a rerun may have come in
         todo = [j for j in counted_jobs(info) if j not in done]
-        for jid, (state, health) in job_states(
-            api, round_dir(archive, rid), todo
-        ).items():
+        try:
+            states = job_states(api, round_dir(archive, rid), todo)
+        except OSError as exc:  # LAVA away longer than its retries
+            print(f"warning: LAVA: {exc}; waiting on", file=sys.stderr)
+            sleep(args.interval)
+            continue
+        for jid, (state, health) in states.items():
             if state != "Finished":
                 continue
             done[jid] = health

@@ -123,3 +123,65 @@ def test_compare_json(lab, capsys):
         "change_percent": 50.0,
     }
     assert out["problems"]["t2"]
+
+
+def test_wait_survives_lava_away(lab, monkeypatch, capsys):
+    """A proxy error while waiting: wait goes on, it doesn't end."""
+    import urllib.error
+
+    imported(lab)
+    lab.lava.jobs[5] = lava_fake.job(5, "c2d", state="Running")
+    info = archive.load_round(str(lab.top), "12")
+    info["jobs"][5] = {"board": "c2d", "flavor": "rt", "test": "cyclictest"}
+    archive.save_round(str(lab.top), info)
+    real = cmd_round_status.job_states
+    calls = []
+
+    def flaky(*a):
+        calls.append(1)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError("u", 502, "Proxy Error", {}, None)
+        return real(*a)
+
+    monkeypatch.setattr(cmd_round_status, "job_states", flaky)
+
+    def finish(seconds):
+        if len(calls) > 1:
+            lab.lava.jobs[5].update(state="Finished", health="Complete")
+
+    cmd_round_status.cmd_round_wait(
+        SimpleNamespace(round="12", interval=1), lab.cfg, {}, sleep=finish
+    )
+    assert "warning: LAVA: HTTP Error 502" in capsys.readouterr().err
+    assert len(calls) == 3
+
+
+def test_api_retries_proxy_errors(monkeypatch):
+    import io
+    import urllib.error
+    import urllib.request
+
+    from srt_build.lava_api import LavaApi
+
+    answers = [
+        urllib.error.HTTPError("u", 502, "Proxy Error", {}, None),
+        urllib.error.URLError("refused"),
+        io.BytesIO(b'{"id": 7}'),
+    ]
+
+    def urlopen(req, timeout):
+        a = answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    api = LavaApi("http://lava.test/api/v0.2/")
+    slept = []
+    monkeypatch.setattr("time.sleep", slept.append)
+    assert api.job(7) == {"id": 7}
+    assert slept == [5, 15]
+    # a 404 is an answer, not LAVA away
+    answers[:] = [urllib.error.HTTPError("u", 404, "Not Found", {}, None)]
+    with pytest.raises(urllib.error.HTTPError):
+        api.job(8)
