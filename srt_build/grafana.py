@@ -4,12 +4,11 @@
 files (grafana_dashboard_files on monitor). Edit this and rerun, not
 the JSON.
 
-  rt-tests.json        "RT tests": the overview, by round. The jobs
-                       with problems, then one row per board, in it
-                       one trend per test with the release rounds on
-                       the x axis (max latency of each round, a line
-                       per flavor and workload). A click on a trend
-                       opens:
+  rt-tests.json        "RT tests": the overview, by round. One row
+                       per board, in it one trend per test with the
+                       release rounds on the x axis (max latency of
+                       each round, a line per flavor and workload). A
+                       click on a trend opens:
   rt-test-detail.json  "RT test detail": one board, flavor and test.
                        Per thread and percentiles over the rounds of
                        the chosen kinds (release by default; test
@@ -19,6 +18,9 @@ the JSON.
   rt-rounds-compared.json "RT rounds compared": two rounds (release or
                        test, chosen at the top) side by side, a bar
                        per board, test and workload.
+  rt-problems.json     "RT problems": the jobs with problems, and the
+                       jobs, the worst max latency and the srt-build
+                       versions over all jobs chosen.
 
 `round export` labels the samples with round and round_kind. The round
 trends use Grafana's Trend panel (Grafana 10 or later): the round, a
@@ -42,6 +44,7 @@ DS = {"type": "prometheus", "uid": "victoriametrics"}
 OVERVIEW_UID = "rt-tests"
 DETAIL_UID = "rt-test-detail"
 COMPARE_UID = "rt-rounds-compared"
+PROBLEMS_UID = "rt-problems"
 
 # Samples of the chosen round kinds, and those without round (jobs
 # export): "" matches a missing label.
@@ -163,6 +166,38 @@ class Dashboard:
             r["repeat"] = repeat
         self.panels.append(r)
         self.y += 1
+
+    def stat(self, title, expr, x, w=6, h=4, steps=None, desc="", unit="none"):
+        self._panel(
+            "stat",
+            title,
+            x,
+            w,
+            h,
+            desc,
+            targets=[self._target(expr, instant=True)],
+            fieldConfig={
+                "defaults": {
+                    "unit": unit,
+                    "color": {"mode": "thresholds"},
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": steps or [{"color": "text", "value": None}],
+                    },
+                },
+                "overrides": [],
+            },
+            options={
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": False,
+                },
+                "colorMode": "background",
+                "graphMode": "none",
+                "textMode": "value",
+            },
+        )
 
     def table(
         self,
@@ -457,30 +492,6 @@ def build_overview(lava_url):
     """The overview dashboard as a dict."""
     d = Dashboard(lava_url)
 
-    d.row("Problems")
-    d.table(
-        "Jobs with problems",
-        f"max by ({BY}, kernel, round, job, kind) "
-        f"(max_over_time(srt_job_problems{{{JOBS}}}[$__range])) > 0",
-        0,
-        24,
-        6,
-        {
-            "board": "Board",
-            "flavor": "Flavor",
-            "test": "Test",
-            "kernel": "Kernel",
-            "round": "Round",
-            "job": "Job",
-            "kind": "Problem",
-        },
-        "Count",
-        desc=PROBLEM_KINDS + " Click a job for LAVA, a round for its test in detail.",
-        detail=tuple(f"${{__data.fields.{c}}}" for c in ("Board", "Flavor", "Test")),
-        sort=("Job", True),
-    )
-    d.y += 6
-
     # One row per board, one round trend per test in it.
     d.row("$board", repeat="board")
     by_round = (
@@ -529,7 +540,6 @@ def build_overview(lava_url):
                 'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor"}, kernel)',
             ),
             _workload_var('board=~"$board", flavor=~"$flavor", test=~"$test"'),
-            _round_kind_var(),
         ],
         LINKS,
         since="now-1y",
@@ -541,7 +551,90 @@ LINKS = [
     {"title": "RT tests", "url": f"/d/{OVERVIEW_UID}", "type": "link"},
     {"title": "RT test detail", "url": f"/d/{DETAIL_UID}", "type": "link"},
     {"title": "RT rounds compared", "url": f"/d/{COMPARE_UID}", "type": "link"},
+    {"title": "RT problems", "url": f"/d/{PROBLEMS_UID}", "type": "link"},
 ]
+
+
+def build_problems(lava_url):
+    """Problems and numbers over all jobs, as a dict: a dashboard of its
+    own, so the overview is the trends only."""
+    d = Dashboard(lava_url)
+    MAX = (
+        'max_over_time(srt_latency_us{stat="max", board=~"$board", '
+        'flavor=~"$flavor", kernel=~"$kernel", ' + WL + ", " + KIND + "}[$__range])"
+    )
+
+    d.row("Summary")
+    d.stat("Jobs", f"count(max_over_time(srt_job_ok{{{JOBS}}}[$__range]))", 0)
+    d.stat(
+        "Jobs with problems",
+        f"count(max_over_time(srt_job_ok{{{JOBS}}}[$__range]) == 0) or vector(0)",
+        6,
+        steps=[{"color": "green", "value": None}, {"color": "red", "value": 1}],
+        desc="Failed health, failed test cases, failed uploads, definitions "
+        "without results or kernel splats on the console (`srt-build jobs "
+        "report`). Which ones: the table next to it.",
+    )
+    d.stat(
+        "Worst max latency",
+        f"max({MAX})",
+        12,
+        desc="Largest max latency of any thread of any job selected.",
+        unit="µs",
+    )
+    d.stat(
+        "srt-build versions",
+        f"count(count by (srt_build) "
+        f"(max_over_time(srt_job_info{{{JOBS}}}[$__range])))",
+        18,
+        steps=[{"color": "green", "value": None}, {"color": "orange", "value": 2}],
+        desc="More than one: the jobs were submitted by different srt-build "
+        "versions.",
+    )
+    d.y += 4
+    d.table(
+        "Jobs with problems",
+        f"max by ({BY}, kernel, round, job, kind) "
+        f"(max_over_time(srt_job_problems{{{JOBS}}}[$__range])) > 0",
+        0,
+        24,
+        6,
+        {
+            "board": "Board",
+            "flavor": "Flavor",
+            "test": "Test",
+            "kernel": "Kernel",
+            "round": "Round",
+            "job": "Job",
+            "kind": "Problem",
+        },
+        "Count",
+        desc=PROBLEM_KINDS + " Click a job for LAVA, a round for its test in detail.",
+        detail=tuple(f"${{__data.fields.{c}}}" for c in ("Board", "Flavor", "Test")),
+        sort=("Job", True),
+    )
+    d.y += 6
+
+    return _dashboard(
+        PROBLEMS_UID,
+        "RT problems",
+        "PREEMPT_RT test rounds in LAVA: the jobs with problems and a few "
+        "numbers over all jobs chosen at the top.",
+        lava_url,
+        d.panels,
+        [
+            _var("board", "label_values(srt_job_ok, board)"),
+            _var("flavor", 'label_values(srt_job_ok{board=~"$board"}, flavor)'),
+            _var(
+                "kernel",
+                'label_values(srt_job_ok{board=~"$board", flavor=~"$flavor"}, kernel)',
+            ),
+            _workload_var('board=~"$board", flavor=~"$flavor"'),
+            _round_kind_var(),
+        ],
+        LINKS,
+        since="now-1y",
+    )
 
 
 def build_compare(lava_url):
@@ -814,6 +907,7 @@ DASHBOARDS = {
     "rt-tests.json": build_overview,
     "rt-test-detail.json": build_detail,
     "rt-rounds-compared.json": build_compare,
+    "rt-problems.json": build_problems,
 }
 
 

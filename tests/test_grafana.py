@@ -6,7 +6,14 @@ import re
 
 import pytest
 
-from srt_build.grafana import COMPARE_UID, DETAIL_UID, OVERVIEW_UID, build_all, queries
+from srt_build.grafana import (
+    COMPARE_UID,
+    DETAIL_UID,
+    OVERVIEW_UID,
+    PROBLEMS_UID,
+    build_all,
+    queries,
+)
 
 ALL = build_all("http://lava.example:10070")
 DASHBOARDS = list(ALL.values())
@@ -28,8 +35,10 @@ def test_files():
         "rt-tests.json",
         "rt-test-detail.json",
         "rt-rounds-compared.json",
+        "rt-problems.json",
     }
-    assert {d["uid"] for d in DASHBOARDS} == {OVERVIEW_UID, DETAIL_UID, COMPARE_UID}
+    uids = {OVERVIEW_UID, DETAIL_UID, COMPARE_UID, PROBLEMS_UID}
+    assert {d["uid"] for d in DASHBOARDS} == uids
 
 
 @pytest.mark.parametrize("d", DASHBOARDS, ids=lambda d: d["uid"])
@@ -116,6 +125,15 @@ def test_rounds_on_the_x_axis():
     assert not [p for p in d["panels"] if p["type"] == "barchart"]
 
 
+def test_overview_is_the_trends():
+    """RT tests: only the trends per board and test; the problems and
+    numbers over all jobs are RT problems."""
+    kinds = {p["type"] for p in ALL["rt-tests.json"]["panels"]}
+    assert kinds == {"row", "trend"}
+    kinds = {p["type"] for p in ALL["rt-problems.json"]["panels"]}
+    assert {"stat", "table"} <= kinds
+
+
 def test_two_rounds_on_their_own():
     """The two-round bars are a dashboard of their own, round A and B at
     its top; the overview has no round selectors any more."""
@@ -131,7 +149,8 @@ def test_two_rounds_on_their_own():
         assert '"key", " ", "board", "test", "workload")' in t["expr"]
     for x in DASHBOARDS:
         urls = {link["url"] for link in x["links"]}
-        assert {f"/d/{u}" for u in (OVERVIEW_UID, DETAIL_UID, COMPARE_UID)} <= urls
+        all_uids = (OVERVIEW_UID, DETAIL_UID, COMPARE_UID, PROBLEMS_UID)
+        assert {f"/d/{u}" for u in all_uids} <= urls
 
 
 @pytest.mark.parametrize(
@@ -141,8 +160,11 @@ def test_release_rounds_by_default(d):
     """Test rounds stay out unless chosen; samples without a round
     (jobs export) stay in. The overview's round trends: release rounds
     only; the detail's follow the round kind (by_kind)."""
-    (v,) = [v for v in d["templating"]["list"] if v["name"] == "round_kind"]
-    assert v["current"]["value"] == "release"
+    kinds = [v for v in d["templating"]["list"] if v["name"] == "round_kind"]
+    # the overview's trends are release rounds only: no round kind to pick
+    assert [v["current"]["value"] for v in kinds] == (
+        [] if d["uid"] == OVERVIEW_UID else ["release"]
+    )
     for p in d["panels"]:
         for t in p.get("targets", []):
             if p["type"] == "trend" and d["uid"] == OVERVIEW_UID:
@@ -167,12 +189,12 @@ def test_rounds_not_time(d):
 def test_links_between_dashboards_and_to_lava():
     overview = json.dumps(ALL["rt-tests.json"])
     detail = json.dumps(ALL["rt-test-detail.json"])
+    problems = json.dumps(ALL["rt-problems.json"])
     assert f"/d/{DETAIL_UID}/rt-test-detail?var-board=$board" in overview
     assert f"/d/{OVERVIEW_UID}" in detail
-    for text in (overview, detail):
+    for text in (problems, detail):
         assert "http://lava.example:10070/scheduler/job/${__value.raw}" in text
-    assert "var-round=${__value.raw}" in detail
-    assert "var-round=${__value.raw}" in overview
+        assert "var-round=${__value.raw}" in text
 
 
 def test_detail_shows_one_board_flavor_and_test():
@@ -188,10 +210,11 @@ def test_only_tests_with_latencies_get_trends():
     """smoke-tests, isolcpus and pi-stress have no latencies: no empty
     panels for them, but their problems still count."""
     for d in DASHBOARDS:
-        test = next(v for v in d["templating"]["list"] if v["name"] == "test")
-        assert "srt_latency_us" in test["definition"]
-    overview = ALL["rt-tests.json"]
-    problems = next(p for p in overview["panels"] if p["type"] == "table")
+        for v in d["templating"]["list"]:
+            if v["name"] == "test":
+                assert "srt_latency_us" in v["definition"]
+    d = ALL["rt-problems.json"]
+    problems = next(p for p in d["panels"] if p["type"] == "table")
     assert "$test" not in problems["targets"][0]["expr"]
 
 
