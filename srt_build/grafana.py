@@ -4,12 +4,11 @@
 files (grafana_dashboard_files on monitor). Edit this and rerun, not
 the JSON.
 
-  rt-tests.json        "RT tests": the overview, by round. One row per
-                       board, in it one trend per test with the release
-                       rounds on the x axis (max latency of each round,
-                       a line per flavor and workload), what needs a
-                       look (problems), and two rounds side by side
-                       (release or test rounds). A click on a trend
+  rt-tests.json        "RT tests": the overview, by round. The jobs
+                       with problems, then one row per board, in it
+                       one trend per test with the release rounds on
+                       the x axis (max latency of each round, a line
+                       per flavor and workload). A click on a trend
                        opens:
   rt-test-detail.json  "RT test detail": one board, flavor and test.
                        Per thread and percentiles over the rounds of
@@ -50,13 +49,6 @@ KIND = 'round_kind=~"$round_kind|"'
 # The background load of a test's samples (results only; the job-level
 # series have no workload). All is .*, which also matches a missing one.
 WL = 'workload=~"$workload"'
-# The overview's variables, as label matchers.
-SEL = (
-    'board=~"$board", flavor=~"$flavor", test=~"$test", kernel=~"$kernel", '
-    + WL
-    + ", "
-    + KIND
-)
 # For the job counts and problems: all tests, also those without
 # latencies (smoke-tests, isolcpus, pi-stress), which $test leaves out.
 JOBS = 'board=~"$board", flavor=~"$flavor", kernel=~"$kernel", ' + KIND
@@ -171,38 +163,6 @@ class Dashboard:
             r["repeat"] = repeat
         self.panels.append(r)
         self.y += 1
-
-    def stat(self, title, expr, x, w=6, h=4, steps=None, desc="", unit="none"):
-        self._panel(
-            "stat",
-            title,
-            x,
-            w,
-            h,
-            desc,
-            targets=[self._target(expr, instant=True)],
-            fieldConfig={
-                "defaults": {
-                    "unit": unit,
-                    "color": {"mode": "thresholds"},
-                    "thresholds": {
-                        "mode": "absolute",
-                        "steps": steps or [{"color": "text", "value": None}],
-                    },
-                },
-                "overrides": [],
-            },
-            options={
-                "reduceOptions": {
-                    "calcs": ["lastNotNull"],
-                    "fields": "",
-                    "values": False,
-                },
-                "colorMode": "background",
-                "graphMode": "none",
-                "textMode": "value",
-            },
-        )
 
     def table(
         self,
@@ -496,36 +456,8 @@ def _dashboard(
 def build_overview(lava_url):
     """The overview dashboard as a dict."""
     d = Dashboard(lava_url)
-    MAX = f'max_over_time(srt_latency_us{{stat="max", {SEL}}}[$__range])'
 
-    d.row("Summary")
-    d.stat("Jobs", f"count(max_over_time(srt_job_ok{{{JOBS}}}[$__range]))", 0)
-    d.stat(
-        "Jobs with problems",
-        f"count(max_over_time(srt_job_ok{{{JOBS}}}[$__range]) == 0) or vector(0)",
-        6,
-        steps=[{"color": "green", "value": None}, {"color": "red", "value": 1}],
-        desc="Failed health, failed test cases, failed uploads, definitions "
-        "without results or kernel splats on the console (`srt-build jobs "
-        "report`). Which ones: the table next to it.",
-    )
-    d.stat(
-        "Worst max latency",
-        f"max({MAX})",
-        12,
-        desc="Largest max latency of any thread of any job selected.",
-        unit="µs",
-    )
-    d.stat(
-        "srt-build versions",
-        f"count(count by (srt_build) "
-        f"(max_over_time(srt_job_info{{{JOBS}}}[$__range])))",
-        18,
-        steps=[{"color": "green", "value": None}, {"color": "orange", "value": 2}],
-        desc="More than one: the jobs were submitted by different srt-build "
-        "versions.",
-    )
-    d.y += 4
+    d.row("Problems")
     d.table(
         "Jobs with problems",
         f"max by ({BY}, kernel, round, job, kind) "
