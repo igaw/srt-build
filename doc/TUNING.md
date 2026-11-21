@@ -430,6 +430,90 @@ correct measurements come first, and cyclictest -m pays the same kind
 of price. Under memory pressure it makes a measuring process the OOM
 killer's likely choice (hack job 771); the rounds have no OOM stressors.
 
+## A reliable setup first: stress-ng classes at 1 ms and above
+
+Status: open (2026-11-21). Before the rounds can judge the RT patches,
+the lab and test setup must be reliable: every high latency explained
+either as the kernel's or as the test's. The stress-ng classes reach
+far higher absolute values than every other test, which raised the
+question in review whether the setup measures something invalid or
+the RT patches have a real problem. This is the base work for a stable
+setup; it comes before new tests or workloads.
+
+### What is flagged
+
+Max latency in us over the release rounds with the current stressor
+set (12, 13, 15, 16; round 11 ran the old set, see "No stressor that
+drives the board out of memory"), by where rtla timerlat measures: the
+IRQ (`i`), the kernel thread (`t`) and the user-space thread (`u`, the
+one comparable to cyclictest):
+
+| Board | Test | IRQ (i) | Kernel (t) | User (u) |
+|---|---|---|---|---|
+| rpi3-64 | stress-ng-io | 112 | 358 | **20016** |
+| rpi3-32 | stress-ng-scheduler | 693 | 904 | **17143** |
+| rpi3-64 | stress-ng-scheduler | 620 | **1001** | 1194 |
+| rpi3-64 | stress-ng-memory | 563 | 976 | 1046 |
+| rpi3-32 | stress-ng-memory | 574 | 832 | 847 |
+| rpi3-64 | stress-ng-os | 391 | 851 | 859 |
+
+For comparison: c2d stays below 65 us in every class, bbb at 270-490
+us; on the Pis network, pipe and the stress mix (rtla-timerlat-stress)
+stay at 230-480 us.
+
+Two kinds:
+
+- **A. User space only, 10-20 ms** (rpi3-64 io, rpi3-32 scheduler),
+  while the same job's kernel side stays below 1 ms. Intermittent:
+  rpi3-64 io was 8.6, 20.0, 0.3 and 10.9 ms in rounds 12-16, rpi3-32
+  scheduler 1.0, 0.9, 17.1 and 11.5 ms. For io this matches "rtla does
+  not lock its memory" (page faults of the user-space threads). For
+  the scheduler class it is less obvious: a stressor that preempts the
+  measuring thread is as likely.
+- **B. The kernel side itself at 0.8-1 ms on both Pis** under the
+  memory, scheduler and os classes, against 350-420 us under the
+  stress mix. Either a stressor that interferes with the measurement
+  or a real latency of the kernel under memory and scheduler load.
+
+### Plan
+
+Each step decides between *setup* (fix the test) and *kernel* (report
+it), and its outcome goes into this document. The lab runs no
+investigation while repeat rounds run.
+
+1. **Locked memory (kind A).** Run the rpi3-64 io and rpi3-32
+   scheduler class jobs with a measurement that locks its memory next
+   to plain rtla (cyclictest `-m`, or rtla with the posted mlock fix,
+   as in hack job 754, `contrib/hack/mlock-ab.sh`), at least three
+   times each: the spikes are intermittent. Locked stays below 1 ms:
+   setup; until a kernel with the rtla fix is in the lab, judge the
+   stress classes by `t` and `i`. Locked spikes too: go on with step 2.
+2. **One stressor at a time (kind B, and A on scheduler).** Run every
+   stressor of the memory, scheduler and os classes on its own next to
+   the measurement on rpi3-32 and rpi3-64 (`contrib/hack/stress-ng-hunt.sh`
+   in one boot, or `--testsuites stress-ng`, one job per stressor), and
+   note each one's max, by `i`, `t` and `u`. For each stressor well
+   above the stress mix, check it against the rules the class jobs
+   already follow (above): normal priority only, no scheduling policy
+   changes, no running out of memory, no log flood. It breaks one:
+   setup, exclude it (`-x`) with its reason in the table above. It
+   breaks none: a normal load at normal priority drives the kernel to
+   1 ms, so step 3.
+3. **Kernel or PREEMPT_RT (what step 2 leaves).** Reproduce with the
+   stressor alone, trace it (rtla `--auto`/osnoise, ftrace) and compare
+   with mainline PREEMPT_RT of the same base, to tell a stable-rt
+   problem from one upstream. Report it where it belongs; it stays in
+   the rounds, flagged in "Open questions".
+4. **Report what is the kernel's.** `round report` and the dashboards
+   judge a stress job by its maximum over all threads, so rtla's user
+   space (`u`) hides the kernel side. Show `t`/`i` apart from `u` (or
+   flag on `t`/`i` only) until the rtla fix is in the lab.
+
+Done when, over at least five repeat rounds on one kernel, every board
+and class stays inside its normal range (docs/dashboards.rst) with `t`
+and `i` below 1 ms, or each exception is explained here with its
+cause.
+
 ## Board and lab quirks
 
 **bbb: the Ethernet PHY is sometimes missing after power-on.** U-Boot

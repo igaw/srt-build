@@ -3,6 +3,16 @@
 Tooling work for srt-build, most useful first. Findings about the
 kernel and its tuning go to `TUNING.md` ("Open questions").
 
+## First: a reliable test setup
+
+The base work before anything else: every high latency of the stress-ng
+classes explained as the kernel's or the test's. Flagged tests, the two
+kinds (rtla user space only, 10-20 ms; the kernel side at 1 ms on the
+Pis) and the plan (locked memory, one stressor at a time, kernel or
+PREEMPT_RT, report the kernel side apart): TUNING.md, "A reliable
+setup first". Tooling it needs here: the kernel side (`t`, `i`) apart
+from rtla's user space (`u`) in `round report` and the dashboards.
+
 ## Rounds: what is left
 
 Rounds and the round archive ([ROUNDS.md](ROUNDS.md)) replaced the
