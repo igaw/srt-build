@@ -276,7 +276,18 @@ class Dashboard:
         )
 
     def round_trend(
-        self, title, expr, series, x, w, h, desc="", log=True, row="round", **extra
+        self,
+        title,
+        expr,
+        series,
+        x,
+        w,
+        h,
+        desc="",
+        log=True,
+        row="round",
+        overrides=(),
+        **extra,
     ):
         """Grafana's Trend panel: the round on the x axis, a line per
         value of label series. An instant query over the dashboard's
@@ -342,7 +353,8 @@ class Dashboard:
                                 "value": {"type": "linear"},
                             },
                         ],
-                    }
+                    },
+                    *overrides,
                 ],
             },
             options={
@@ -697,6 +709,42 @@ def by_kind(expr, label):
     return f'label_replace({line}, "n", "$1", "round", "t?([0-9]+)")'
 
 
+# The normal range: mean +- BAND_SIGMAS standard deviations of the
+# release rounds' max latency, a band behind the line.
+BAND_SIGMAS = 2
+
+
+def band_overrides(color="green"):
+    """upper and lower: no lines or points of their own, the area
+    between them filled (Grafana's fill below to)."""
+
+    def edge(name, extra=()):
+        return {
+            "matcher": {"id": "byName", "options": name},
+            "properties": [
+                {"id": "custom.lineWidth", "value": 0},
+                {"id": "custom.showPoints", "value": "never"},
+                {
+                    "id": "custom.hideFrom",
+                    "value": {"legend": True, "tooltip": False, "viz": False},
+                },
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": color}},
+                *extra,
+            ],
+        }
+
+    return [
+        edge(
+            "upper",
+            [
+                {"id": "custom.fillBelowTo", "value": "lower"},
+                {"id": "custom.fillOpacity", "value": 20},
+            ],
+        ),
+        edge("lower"),
+    ]
+
+
 def build_detail(lava_url):
     """The detail dashboard (one board, flavor and test) as a dict: the
     rounds of the chosen kinds side by side, and one round in depth."""
@@ -728,6 +776,37 @@ def build_detail(lava_url):
         )
 
     d.row("By round")
+    # The release rounds' max latency, the reference for the band.
+    REF = (
+        "max by (round, round_kind) (max_over_time(srt_latency_us"
+        '{stat="max", board="$board", flavor="$flavor", test="$test", '
+        f'kernel=~"$kernel", {WL}, {RELEASE}}}[$__range]))'
+    )
+    mean, sd = f"avg({REF})", f"stddev({REF})"
+    d.round_trend(
+        "Max latency and normal range",
+        by_kind(
+            "label_set(max by (round, round_kind) (max_over_time(srt_latency_us"
+            f'{{stat="max", {BYROUND}}}[$__range])), "series", "max")'
+            f" or label_set({REF} * 0 + scalar({mean} + {BAND_SIGMAS} * {sd}), "
+            '"series", "upper")'
+            f" or label_set(clamp_min({REF} * 0 + scalar({mean} - {BAND_SIGMAS} * "
+            f'{sd}), 0), "series", "lower")',
+            "series",
+        ),
+        "line",
+        0,
+        24,
+        8,
+        row="n",
+        log=False,
+        overrides=band_overrides(),
+        desc="Max latency of each round (all threads and workloads chosen), "
+        f"in front of the normal range: the mean +- {BAND_SIGMAS} standard "
+        "deviations of the release rounds shown. A round outside the band "
+        "is worth a look; with few rounds the band is rough.",
+    )
+    d.y += 8
     d.round_trend(
         "Max latency per thread",
         per_round("max", "thread"),

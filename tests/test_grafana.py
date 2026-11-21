@@ -244,6 +244,7 @@ def test_detail_by_round():
         "Max latency per thread",
         "Percentiles (all threads)",
         "Average latency per thread",
+        "Max latency and normal range",
     }
     expr = trends["Percentiles (all threads)"]["targets"][0]["expr"]
     for name in ("p50", "p99", "p99.9", "max"):
@@ -260,3 +261,20 @@ def test_detail_problems_of_the_jobs_with_the_test():
     assert "and on (job)" in expr
     head = expr.split("and on (job)")[0]
     assert 'test="$test"' not in head
+
+
+def test_normal_range_band():
+    """The max per round in front of a band: mean +- 2 standard
+    deviations of the release rounds, filled between upper and lower."""
+    d = ALL["rt-test-detail.json"]
+    (p,) = [p for p in d["panels"] if p["title"] == "Max latency and normal range"]
+    expr = p["targets"][0]["expr"]
+    for name in ("max", "upper", "lower"):
+        assert f'"series", "{name}")' in expr
+    assert "stddev(" in expr and "clamp_min(" in expr
+    assert 'round_kind="release"' in expr  # the reference: release rounds
+    over = {
+        o["matcher"]["options"]: o["properties"] for o in p["fieldConfig"]["overrides"]
+    }
+    assert {"id": "custom.fillBelowTo", "value": "lower"} in over["upper"]
+    assert {"id": "custom.lineWidth", "value": 0} in over["lower"]
