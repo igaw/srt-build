@@ -12,6 +12,7 @@ reported, compared and sent to the dashboards.
    userguide
    release-testing
    rounds
+   dashboards
    debugging
    agents
    command-line

@@ -90,7 +90,8 @@ Dashboards
 ``round export`` turns each finished job into VictoriaMetrics samples at
 the job's end time: whether it had problems, min/avg/max latency per
 thread, and the histograms of the rt-tests/rtla JSON uploads. ``jobs
-dashboard DIR --lava-url URL`` writes the Grafana dashboards.
+dashboard DIR --lava-url URL`` writes the Grafana dashboards. What they show, and how the normal range (the green band) is computed:
+:doc:`dashboards`.
 
 Removing data
 -------------

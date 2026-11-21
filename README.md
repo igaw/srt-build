@@ -144,7 +144,10 @@ time, one job's histogram and threads, jobs and kernels), and
 `rt-rounds-compared.json`, two rounds (release or test, chosen at its
 top) side by side, and `rt-problems.json`, the jobs with problems and a
 few numbers over all jobs. A click on a trend in the overview opens its
-details; they link to each other at the top.
+details; they link to each other at the top. The green band in the trends is
+the normal range of the release rounds (median +- 3 x 1.4826 x MAD, at
+least +- 40 % and 20 us), red points the rounds above it: see
+docs/dashboards.rst.
 
 ## Debugging on a board
 
