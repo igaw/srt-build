@@ -27,6 +27,14 @@ next number; --test: the next test round), their definitions unchanged
 but srt.round: the same kernels (those N installed, by URL), boards and
 tests. It needs no kernel tree, only LAVA: to run a release's round
 again, e.g. overnight, from anywhere the lavacli identity works.
+
+`--count K` (start and repeat) submits K rounds in one go, the next K
+numbers, each a round of its own with `batch: <first>` in round.yaml.
+LAVA runs a board's jobs by priority, then in the order submitted, so
+the rounds run back to back, unattended; `round wait --batch` follows
+them. A batch's jobs are priority low (--priority: low, medium, high
+or 0-100), so other people's jobs go first. The disk check counts
+lava-round-gb for every round after the first.
 """
 
 import argparse
@@ -48,6 +56,7 @@ from ..archive import (
     next_round,
     parse_round,
     round_ids,
+    round_kind,
     save_round,
 )
 from .. import helpers
@@ -65,6 +74,12 @@ from ..rounds import (
 from .cmd_round import confirm
 
 LAVA_DISK_MIN_GB = 10
+# What a round leaves on the LAVA server: job logs (round 19, 54 jobs:
+# 20 MB), Artifactorial uploads until `round report` deletes them, the
+# database; a running job's 0.7-0.9 GB in the dispatcher's tmp is freed
+# when it ends and lava-disk-min-gb covers it.
+LAVA_ROUND_GB = 1
+PRIORITIES = ("low", "medium", "high")
 
 
 def add_parsers(sub):
@@ -73,6 +88,7 @@ def add_parsers(sub):
     p.add_argument("--round", help="its number (default: the next)")
     p.add_argument("--test", action="store_true", help="a test round (t1, t2, ...)")
     p.add_argument("--notes", help="a line about the round, for round.yaml")
+    add_batch_args(p)
     p.add_argument(
         "--skip-build",
         action="store_true",
@@ -88,6 +104,7 @@ def add_parsers(sub):
     p.add_argument("round", help="the round to repeat: 12 (release), t3 (test)")
     p.add_argument("--test", action="store_true", help="as a test round")
     p.add_argument("--notes", help="a line about the round (default: repeat of N)")
+    add_batch_args(p)
     p.add_argument(
         "--dry-run", action="store_true", help="list the jobs, submit nothing"
     )
@@ -98,6 +115,62 @@ def add_parsers(sub):
     p.add_argument("round", help="the round: 12 (release), t3 (test)")
     p.add_argument("job", type=int, help="the job to replace")
     p.set_defaults(func=cmd_round_rerun)
+
+
+def add_batch_args(p):
+    p.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        help="this many rounds in one go, back to back (a batch)",
+    )
+    p.add_argument(
+        "--priority",
+        help="the jobs' LAVA priority: low, medium, high or 0-100 "
+        "(default: low for a batch, else medium)",
+    )
+
+
+def parse_priority(value):
+    """LAVA's job priority: "low", "medium", "high" or 0-100; None."""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    if s in PRIORITIES:
+        return s
+    if s.isdigit() and int(s) <= 100:
+        return int(s)
+    raise SystemExit(f"bad priority {value!r}: low, medium, high or 0-100")
+
+
+def batch_of(args):
+    """(count, priority) of the command: a batch is low unless told."""
+    count = getattr(args, "count", None)
+    count = 1 if count is None else count
+    if count < 1:
+        raise SystemExit("--count: 1 or more rounds")
+    priority = parse_priority(getattr(args, "priority", None))
+    if priority is None and count > 1:
+        priority = "low"
+    return count, priority
+
+
+def following(rid, count):
+    """rid and the count - 1 round ids after it: 20, 21, 22; t3, t4."""
+    prefix = "t" if round_kind(rid) == TEST else ""
+    n = int(str(rid).lstrip("t"))
+    return [f"{prefix}{n + i}" for i in range(count)]
+
+
+def batch_line(rids, priority):
+    """What the header says about a batch and the priority."""
+    out = []
+    if len(rids) > 1:
+        out.append(f"  {len(rids)} rounds, one after another: {', '.join(rids)} "
+                   f"(batch {rids[0]})")  # fmt: skip
+    if priority is not None:
+        out.append(f"  priority {priority}")
+    return out
 
 
 def _git(repo, *args, timeout=60):
@@ -149,17 +222,24 @@ def lava_free_gb(system_config):
         return None
 
 
-def disk_warnings(system_config):
+def disk_warnings(system_config, count=1):
+    """The minimum, and lava-round-gb for each round after the first."""
     free = lava_free_gb(system_config)
     limit = int(system_config.get("lava-disk-min-gb", LAVA_DISK_MIN_GB))
+    per = int(system_config.get("lava-round-gb", LAVA_ROUND_GB))
+    need = limit + (count - 1) * per
     if free is None:
         return ["the LAVA server's free disk is unknown (ssh failed)"]
-    if free < limit:
+    if free < need and count > 1:
+        return [f"the LAVA server has {free}G free, less than the {need}G "
+                f"{count} rounds need ({limit}G and {per}G per round after "
+                f"the first)"]  # fmt: skip
+    if free < need:
         return [f"the LAVA server has {free}G free, less than {limit}G"]
     return []
 
 
-def board_args(board, submission, rid):
+def board_args(board, submission, rid, priority=None):
     """lava's arguments for one board and entry of submissions."""
     flavors = submission.get("flavors")
     if isinstance(flavors, list):
@@ -180,6 +260,7 @@ def board_args(board, submission, rid):
         append="",
         debug=False,
         round=rid,
+        priority=priority,
     )
 
 
@@ -209,6 +290,52 @@ def plan(args, system_config, machine_config):
         notes=args.notes,
     )
     return info
+
+
+def round_like(info, rid):
+    """A new round.yaml rid like info (a batch's next round), no jobs."""
+    keys = ("srt_build", "test_definitions", "kernel", "notes", "repeats",
+            "boards", "submissions", "batch", "priority")  # fmt: skip
+    new = new_round(rid, info["lava"], **{k: info.get(k) for k in keys})
+    new["jobs"] = {}
+    return new
+
+
+def check_free(archive, rids):
+    taken = [r for r in rids if r in round_ids(archive)]
+    if taken:
+        raise SystemExit(f"round {', '.join(taken)} exists already")
+
+
+def each_round(archive, info, rids):
+    """info, then a round like it for each of the other rids, each in
+    the archive before its first job."""
+    for n, rid in enumerate(rids):
+        if n:
+            check_free(archive, [rid])
+            info = round_like(info, rid)
+        save_round(archive, info)
+        yield info
+        print_round(info)
+
+
+def submit_anyway(warnings, yes):
+    for w in warnings:
+        print(f"warning: {w}")
+    if warnings and not confirm("submit anyway?", yes):
+        raise SystemExit("nothing submitted")
+
+
+def start_plan(args, system_config, machine_config):
+    """(round.yaml of the first round, its batch's round ids, priority)."""
+    count, priority = batch_of(args)
+    if count > 1 and args.round:
+        raise SystemExit("--count takes the next round numbers, not --round")
+    info = plan(args, system_config, machine_config)
+    rids = following(info["round"], count)
+    check_free(archive_path(system_config), rids)
+    info.update(batch=rids[0] if count > 1 else None, priority=priority)
+    return info, rids, priority
 
 
 def submit_board(ctx_args, info, i, system_config, machine_config, kernel_config):
@@ -259,49 +386,56 @@ def build_board(board, subs, rid, system_config, machine_config, kernel_config):
     print(f"{board}: built {', '.join(sorted(built)) or 'nothing'}")
 
 
-def dry_run(info, build, system_config, machine_config, kernel_config):
+def dry_run(info, build, system_config, machine_config, kernel_config,
+            count=1, priority=None):  # fmt: skip
     """Render every job of the round, build and submit nothing."""
     if build:
         print("  builds first (not in a dry run): every flavor per board")
     else:
         print("  builds nothing: the kernels installed already")
+    if count > 1:
+        print(f"  each of the {count} rounds:")
     for board in info["boards"]:
         for sub in info["submissions"]:
-            dry_run_board(board_args(board, sub, info["round"]), system_config,
-                          machine_config, kernel_config)  # fmt: skip
+            dry_run_board(board_args(board, sub, info["round"], priority),
+                          system_config, machine_config, kernel_config)  # fmt: skip
 
 
 def cmd_round_start(args, system_config, machine_config, kernel_config):
     archive = archive_path(system_config)
-    info = plan(args, system_config, machine_config)
-    rid, subs = info["round"], info["submissions"]
+    info, rids, priority = start_plan(args, system_config, machine_config)
+    rid, subs, count = info["round"], info["submissions"], len(rids)
     print(f"round {rid} ({info['kind']}) on {info['lava']}: srt-build "
           f"{info['srt_build']}, kernel {info['kernel']}")  # fmt: skip
+    for line in batch_line(rids, priority):
+        print(line)
     build = not getattr(args, "skip_build", False)
     print(f"  boards {', '.join(info['boards'])}")
     print("  per board: " + ("build and install every flavor, then " if build
                              else "the installed kernels, ")
           + "; ".join(submission_command(s) for s in subs))  # fmt: skip
-    warnings = checkout_warnings(fetch=not args.dry_run) + disk_warnings(system_config)
-    for w in warnings:
-        print(f"warning: {w}")
+    warnings = checkout_warnings(fetch=not args.dry_run) + disk_warnings(
+        system_config, count
+    )
     if args.dry_run:
-        dry_run(info, build, system_config, machine_config, kernel_config)
+        for w in warnings:
+            print(f"warning: {w}")
+        dry_run(info, build, system_config, machine_config, kernel_config,
+                count, priority)  # fmt: skip
         return
-    if warnings and not confirm("submit anyway?", args.yes):
-        raise SystemExit("nothing submitted")
+    submit_anyway(warnings, args.yes)
     helpers.ensure_lavacli_available()
     if build:
         for board in info["boards"]:
             build_board(board, subs, rid, system_config, machine_config,
                         kernel_config)  # fmt: skip
 
-    save_round(archive, info)
-    for board in info["boards"]:
-        for i, sub in enumerate(subs):
-            submit_board(board_args(board, sub, rid), info, i, system_config,
-                         machine_config, kernel_config)  # fmt: skip
-    print_round(info)
+    for one in each_round(archive, info, rids):
+        for board in one["boards"]:
+            for i, sub in enumerate(subs):
+                submit_board(board_args(board, sub, one["round"], priority),
+                             one, i, system_config, machine_config,
+                             kernel_config)  # fmt: skip
 
 
 def cmd_round_rerun(args, system_config, machine_config):
@@ -326,15 +460,27 @@ def cmd_round_rerun(args, system_config, machine_config):
     print(f"round {rid}: job {args.job} rerun as {new}", file=sys.stderr)
 
 
-def with_round(definition, rid):
-    """The job definition with srt.round rid, else unchanged."""
+def with_round(definition, rid, priority=None):
+    """The job definition with srt.round rid (and priority), else
+    unchanged."""
     job = yaml.safe_load(definition)
     job.setdefault("metadata", {})["srt.round"] = str(rid)
+    if priority is not None:
+        job["priority"] = priority
     return yaml.safe_dump(job, sort_keys=False, default_flow_style=False)
+
+
+def repeat_dry_run(src, jobs, count):
+    if count > 1:
+        print(f"  each of the {count} rounds:")
+    for j in jobs:
+        e = src["jobs"][j]
+        print(f"  would submit again: {j}  {e['board']}  {e['flavor']}  {e['test']}")
 
 
 def cmd_round_repeat(args, system_config, machine_config):
     archive = archive_path(system_config)
+    count, priority = batch_of(args)
     src = load_round(archive, parse_round(args.round))
     api = LavaApi.from_config(system_config)
     check_instance(src, system_config, api)
@@ -342,9 +488,10 @@ def cmd_round_repeat(args, system_config, machine_config):
     if not jobs:
         raise SystemExit(f"round {src['round']} has no jobs")
     kind = TEST if args.test else RELEASE
-    rid = next_round(archive, kind)
+    rids = following(next_round(archive, kind), count)
+    check_free(archive, rids)
     info = new_round(
-        rid,
+        rids[0],
         src["lava"],
         srt_build=src.get("srt_build"),
         kernel=src.get("kernel"),
@@ -355,28 +502,24 @@ def cmd_round_repeat(args, system_config, machine_config):
         submissions=list(src.get("submissions") or []),
         repeats=src["round"],
         notes=args.notes or f"repeat of {src['round']}",
+        batch=rids[0] if count > 1 else None,
+        priority=priority,
     )
-    print(f"round {rid} ({info['kind']}) on {info['lava']}: repeats round "
+    print(f"round {rids[0]} ({info['kind']}) on {info['lava']}: repeats round "
           f"{src['round']}, kernel {info['kernel']}, {len(jobs)} jobs")  # fmt: skip
+    for line in batch_line(rids, priority):
+        print(line)
     if args.dry_run:
-        for j in jobs:
-            e = src["jobs"][j]
-            print(
-                f"  would submit again: {j}  {e['board']}  {e['flavor']}  {e['test']}"
-            )
+        repeat_dry_run(src, jobs, count)
         return
-    warnings = disk_warnings(system_config)
-    for w in warnings:
-        print(f"warning: {w}")
-    if warnings and not confirm("submit anyway?", args.yes):
-        raise SystemExit("nothing submitted")
-    definitions = {j: with_round(api.job(j)["definition"], rid) for j in jobs}
+    submit_anyway(disk_warnings(system_config, count), args.yes)
+    definitions = {j: api.job(j)["definition"] for j in jobs}
     rpc = rpc_from_lavacli(identity=system_config.get("lava-identity", "default"))
-    save_round(archive, info)
-    for j in jobs:
-        new = rpc.scheduler.jobs.submit(definitions[j])
-        new = int(new[0] if isinstance(new, list) else new)
-        check_new_jobs(archive, info["lava"], rid, [new], own=info["jobs"])
-        info["jobs"][new] = dict(src["jobs"][j])
-        save_round(archive, info)
-    print_round(info)
+    for one in each_round(archive, info, rids):
+        rid = one["round"]
+        for j in jobs:
+            new = rpc.scheduler.jobs.submit(with_round(definitions[j], rid, priority))
+            new = int(new[0] if isinstance(new, list) else new)
+            check_new_jobs(archive, one["lava"], rid, [new], own=one["jobs"])
+            one["jobs"][new] = dict(src["jobs"][j])
+            save_round(archive, one)

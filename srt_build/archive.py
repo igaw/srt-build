@@ -120,6 +120,16 @@ def next_round(archive, kind=RELEASE):
     return f"t{n}" if kind == TEST else str(n)
 
 
+def batch_rounds(archive, batch):
+    """The rounds of a batch (round start/repeat --count), in order."""
+    batch = parse_round(batch)
+    rids = [r for r in round_ids(archive, round_kind(batch))
+            if str(load_round(archive, r).get("batch")) == batch]  # fmt: skip
+    if not rids:
+        raise SystemExit(f"no rounds of batch {batch} in {archive}")
+    return rids
+
+
 def newest_round(archive):
     """The round started last, of either kind; None if there is none."""
     ids = round_ids(archive)
@@ -145,7 +155,7 @@ def load_round(archive, rid):
 # round.yaml's keys in the order of doc/ROUNDS.md; others follow.
 ORDER = (
     "format round kind lava started srt_build test_definitions kernel notes repeats "
-    "imported boards submissions jobs reruns reported exported"
+    "batch priority imported boards submissions jobs reruns reported exported"
 ).split()
 
 

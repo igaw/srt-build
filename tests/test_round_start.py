@@ -327,3 +327,112 @@ def test_repeat(lab, monkeypatch, capsys):
     ids = iter([31, 32, 33])
     repeat(round="13", test=True)
     assert archive.load_round(str(lab.top), "t1")["repeats"] == "13"
+
+
+def test_start_batch(lab, capsys):
+    """--count 3: three rounds in one go, batch 1, priority low."""
+    start(lab, dry_run=True, count=3)
+    out = capsys.readouterr().out
+    assert "3 rounds, one after another: 1, 2, 3 (batch 1)" in out
+    assert "priority low" in out and "each of the 3 rounds:" in out
+    assert lab.submitted == [] and archive.round_ids(str(lab.top)) == []
+    start(lab, count=3, notes="baseline, back to back")
+    assert archive.round_ids(str(lab.top)) == ["1", "2", "3"]
+    assert archive.batch_rounds(str(lab.top), "1") == ["1", "2", "3"]
+    per = len(lab.submitted) // 3
+    for n, rid in enumerate(("1", "2", "3")):
+        info = archive.load_round(str(lab.top), rid)
+        assert info["batch"] == "1" and info["priority"] == "low"
+        assert info["notes"] == "baseline, back to back"
+        jobs = lab.submitted[n * per : (n + 1) * per]
+        assert {j["metadata"]["srt.round"] for j in jobs} == {rid}
+        assert {j["priority"] for j in jobs} == {"low"}
+        assert len(info["jobs"]) == per
+    # One round: medium, no batch, as before; --priority as given.
+    start(lab)
+    info = archive.load_round(str(lab.top), "4")
+    assert "batch" not in info and "priority" not in info
+    assert lab.submitted[-1]["priority"] == "medium"
+    start(lab, priority="high")
+    assert archive.load_round(str(lab.top), "5")["priority"] == "high"
+    assert lab.submitted[-1]["priority"] == "high"
+
+
+def test_start_batch_refuses(lab):
+    with pytest.raises(SystemExit, match="not --round"):
+        start(lab, count=2, round="7")
+    with pytest.raises(SystemExit, match="1 or more"):
+        start(lab, count=0)
+    with pytest.raises(SystemExit, match="bad priority"):
+        start(lab, priority="urgent")
+    with pytest.raises(SystemExit, match="bad priority"):
+        start(lab, priority="101")
+    assert cmd_round_start.parse_priority("40") == 40
+    assert lab.submitted == []
+
+
+def test_start_batch_builds_once(lab, builds):
+    start(lab, skip_build=False, count=2)
+    built = [f for s, f, _ in builds if s == "build"]
+    assert sorted(built) == sorted(set(built))
+    assert archive.round_ids(str(lab.top)) == ["1", "2"]
+
+
+def test_disk_scales_with_count(lab, monkeypatch):
+    monkeypatch.setattr(cmd_round_start, "lava_free_gb", lambda c: 12)
+    assert cmd_round_start.disk_warnings(lab.cfg) == []
+    assert cmd_round_start.disk_warnings(lab.cfg, 3) == []  # 10 + 2 x 1
+    (w,) = cmd_round_start.disk_warnings(lab.cfg, 4)
+    assert w == ("the LAVA server has 12G free, less than the 13G 4 rounds "
+                 "need (10G and 1G per round after the first)")  # fmt: skip
+    cfg = {**lab.cfg, "lava-round-gb": 2}
+    assert cmd_round_start.disk_warnings(cfg, 2) == []
+    assert cmd_round_start.disk_warnings(cfg, 3)
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO("n\n"))
+    with pytest.raises(SystemExit, match="nothing submitted"):
+        start(lab, count=4)
+    assert lab.submitted == []
+
+
+def test_repeat_batch(lab, monkeypatch, capsys):
+    """round repeat 12 --count 3: rounds 13-15 of batch 13, jobs low."""
+    imported(lab)
+    for j in (1, 2, 3):
+        lab.lava.jobs[j]["definition"] = yaml.safe_dump(
+            {"job_name": f"job {j}", "priority": "medium",
+             "metadata": {"srt.round": "12"}}  # fmt: skip
+        )
+    rpc = FakeRpc(0)
+    ids = iter(range(21, 40))
+    rpc.submit = lambda d: rpc.definitions.append(d) or [next(ids)]
+    monkeypatch.setattr(cmd_round_start, "rpc_from_lavacli", lambda **kw: rpc)
+
+    def repeat(**kw):
+        args = {"round": "12", "test": False, "notes": None, "dry_run": False}
+        args = SimpleNamespace(**{**args, "yes": False, **kw})
+        cmd_round_start.cmd_round_repeat(args, lab.cfg, {})
+
+    repeat(dry_run=True, count=3)
+    out = capsys.readouterr().out
+    assert "3 rounds, one after another: 13, 14, 15 (batch 13)" in out
+    assert rpc.definitions == []
+    repeat(count=3)
+    assert archive.batch_rounds(str(lab.top), "13") == ["13", "14", "15"]
+    jobs = [yaml.safe_load(d) for d in rpc.definitions]
+    assert [j["metadata"]["srt.round"] for j in jobs] == ["13"] * 3 + ["14"] * 3 + [
+        "15"
+    ] * 3
+    assert {j["priority"] for j in jobs} == {"low"}
+    for rid, first in (("13", 21), ("14", 24), ("15", 27)):
+        info = archive.load_round(str(lab.top), rid)
+        assert info["batch"] == "13" and info["repeats"] == "12"
+        assert info["priority"] == "low"
+        assert sorted(info["jobs"]) == [first, first + 1, first + 2]
+    # One repeat keeps the definition's priority unless --priority.
+    rpc.definitions.clear()
+    repeat()
+    assert yaml.safe_load(rpc.definitions[0])["priority"] == "medium"
+    assert "batch" not in archive.load_round(str(lab.top), "16")
+    rpc.definitions.clear()
+    repeat(priority="30")
+    assert yaml.safe_load(rpc.definitions[0])["priority"] == 30

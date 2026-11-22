@@ -116,6 +116,8 @@ test_definitions:
 kernel: v6.12.117-rt23       # git describe of the kernel tree
 notes: stress-ng classes only    # optional, free text (--notes)
 repeats: 15                  # round repeat only: the round it submitted again
+batch: 20                    # --count only: the first round of the batch
+priority: low                # --priority, or low for a batch: the jobs' LAVA priority
 imported: '2026-11-13T17:52:31Z' # round import only: when it was backfilled
 boards: [bbb, c2d, rpi3-32, rpi3-64]
 submissions:                 # the lava commands: config.yml rounds, or the
@@ -233,6 +235,8 @@ All but `start` run without the kernel tree (`repeat` too).
   boards and tests. Copies kernel, srt_build, test_definitions, boards,
   submissions and each job's entry from N, `repeats: N`. Warns and asks
   on low LAVA disk; no kernel tree, no lavacli (XML-RPC).
+  `--count K` and `--priority P` as for `round start`; without
+  `--priority` a single repeat keeps the definitions' priority.
 - `round start [--boards ...] [--round N] [--test] [--skip-build] [--notes]
   [--dry-run] [--yes]`
   - Before submitting: prints round, srt-build version, kernel, boards
@@ -251,6 +255,25 @@ All but `start` run without the kernel tree (`repeat` too).
     round whole at the end.
   - `--dry-run` renders every job and prints what it would submit;
     nothing is submitted or written (no git fetch either).
+  - `--count K`: K rounds in one go, the next K numbers (not with
+    `--round`), each a round.yaml of its own with `batch: <first>`;
+    builds once, then submits the rounds one after another. LAVA runs a
+    board's jobs by priority, then in the order submitted, so the rounds
+    run back to back, unattended (`round wait --batch`, below). The disk
+    check needs `lava-disk-min-gb` and `lava-round-gb` (1) for each round
+    after the first: what a round leaves on the server (round 19, 54
+    jobs: 20 MB of job logs, the uploads until `round report` deletes
+    them, the database); a running job's 0.7-0.9 GB in the dispatcher's
+    tmp is freed when it ends and the minimum covers it.
+  - `--priority P`: the jobs' LAVA priority, `low`, `medium`, `high` or
+    0-100 (`jobs/job-base.jinja2`, from the job context). Default
+    `medium`, `low` for a batch: it keeps the boards for most of a day,
+    and other people's jobs go first. In round.yaml when set.
+  - A rerun of a batch's job lands behind the rounds still queued: it
+    stays in its own round, so this changes nothing but the time.
+  - Back to back measures one stretch of time; rounds spread over days
+    (or nights) also see what changes between them. Say which in
+    `--notes`.
 - `round status [N]` (default: the round started last): per job state
   and health from LAVA (from the archive for whole jobs), the rerun
   mapping, free disk on the LAVA server.
