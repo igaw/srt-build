@@ -61,8 +61,15 @@ problems) and round_compare against the previous round on the same
 kernel. Judge results as doc/TUNING.md says: only a change beyond
 about 40 % and 20 us is worth a look; report problems, not every job.
 
-Submitting needs a server started with --allow-submit, removing a
-round --allow-delete; a refused call means: ask the maintainer."""
+More rounds of the same kernel (for the normal range): round_repeat
+submits a round's jobs again, no tree needed; count submits several
+rounds in one go (a batch, priority low), which LAVA runs back to back.
+round_cancel gives the lab back: the jobs of a round or batch not yet
+finished.
+
+Submitting and cancelling need a server started with --allow-submit,
+removing a round --allow-delete; a refused call means: ask the
+maintainer."""
 
 _ROUND = re.compile(r"t?[0-9]+")
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -200,6 +207,18 @@ class Server:
                 "--trees, e.g. v6.12-rt",
             }
         }
+        batch = {
+            "count": {
+                "type": "integer",
+                "default": 1,
+                "description": "this many rounds in one go, back to back " "(a batch)",
+            },
+            "priority": {
+                "type": "string",
+                "description": "the jobs' LAVA priority: low, medium, high "
+                "or 0-100; default low for a batch, else medium",
+            },
+        }
         lists = {
             "flavors": {"type": "string", "description": "e.g. rt,nohz"},
             "tests": {"type": "string", "description": "e.g. cyclictest"},
@@ -334,6 +353,7 @@ class Server:
                         },
                         "boards": {"type": "string", "description": "e.g. bbb,c2d"},
                         "notes": {"type": "string"},
+                        **batch,
                         "skip_build": {
                             "type": "boolean",
                             "default": False,
@@ -349,6 +369,54 @@ class Server:
                     "required": ["tree"],
                 },
                 self._round_start,
+                destructive=True,
+            ),
+            Tool(
+                "round_repeat",
+                "Submit a round's jobs again as the next round (count: that "
+                "many rounds, a batch), the same kernels, boards and tests; "
+                "no tree. A dry run lists them; the real one needs "
+                "--allow-submit, and yes after the maintainer saw the "
+                "warnings.",
+                {
+                    "properties": {
+                        "round": rnd["round"],
+                        "test": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "as test rounds (t1, t2, ...)",
+                        },
+                        "notes": {"type": "string"},
+                        **batch,
+                        "dry_run": {"type": "boolean", "default": True},
+                        "yes": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "submit despite warnings",
+                        },
+                    },
+                    "required": ["round"],
+                },
+                self._repeat,
+                destructive=True,
+            ),
+            Tool(
+                "round_cancel",
+                "Cancel the jobs of a round, or of every round of a batch "
+                "(its first round), that haven't finished; the rounds stay "
+                "in the archive. A dry run lists them; the real one needs "
+                "--allow-submit.",
+                {
+                    "properties": {
+                        "round": rnd["round"],
+                        "batch": {
+                            "type": "string",
+                            "description": "a batch's first round, instead " "of round",
+                        },
+                        "dry_run": {"type": "boolean", "default": True},
+                    },
+                },
+                self._cancel,
                 destructive=True,
             ),
             Tool(
@@ -582,17 +650,43 @@ class Server:
         self._need(self.opts.allow_submit, "--allow-submit", "srt-build lava")
         return self._task(cmd, cwd, f"lava {board}")
 
+    @staticmethod
+    def _notes(args):
+        notes = args.get("notes")
+        if notes is None:
+            return []
+        if not isinstance(notes, str) or "\n" in notes:
+            raise ToolError("notes must be one line")
+        return ["--notes", notes]
+
+    @staticmethod
+    def _batch(args):
+        """--count and --priority of round_start and round_repeat."""
+        out = []
+        count = args.get("count", 1)
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            raise ToolError("count must be a number of rounds, 1 or more")
+        if count > 1:
+            out += ["--count", str(count)]
+        priority = args.get("priority")
+        if priority is not None:
+            ok = isinstance(priority, str) and (
+                priority in ("low", "medium", "high")
+                or (priority.isdigit() and int(priority) <= 100)
+            )
+            if not ok:
+                raise ToolError("priority must be low, medium, high or 0-100")
+            out += ["--priority", priority]
+        return out
+
     def _round_start(self, args):
         cwd = self._tree(args)
         cmd = ["round", "start"]
         if self._bool(args, "test", False):
             cmd.append("--test")
         cmd += self._list(args, "boards")
-        notes = args.get("notes")
-        if notes is not None:
-            if not isinstance(notes, str) or "\n" in notes:
-                raise ToolError("notes must be one line")
-            cmd += ["--notes", notes]
+        cmd += self._notes(args)
+        cmd += self._batch(args)
         if self._bool(args, "skip_build", False):
             cmd.append("--skip-build")
         if self._bool(args, "dry_run", True):
@@ -601,6 +695,31 @@ class Server:
         if self._bool(args, "yes", False):
             cmd.append("--yes")
         return self._task(cmd, cwd, "round start")
+
+    def _repeat(self, args):
+        cmd = ["round", "repeat", self._round_id(args.get("round"))]
+        if self._bool(args, "test", False):
+            cmd.append("--test")
+        cmd += self._notes(args) + self._batch(args)
+        if self._bool(args, "dry_run", True):
+            return self._text(cmd + ["--dry-run"])
+        self._need(self.opts.allow_submit, "--allow-submit", "srt-build round repeat")
+        if self._bool(args, "yes", False):
+            cmd.append("--yes")
+        return self._text(cmd)
+
+    def _cancel(self, args):
+        cmd = ["round", "cancel"]
+        if args.get("batch") is not None:
+            if args.get("round") is not None:
+                raise ToolError("round or batch, not both")
+            cmd += ["--batch", self._round_id(args["batch"], "batch")]
+        else:
+            cmd += self._round(args)
+        if self._bool(args, "dry_run", True):
+            return self._text(cmd + ["--dry-run"])
+        self._need(self.opts.allow_submit, "--allow-submit", "srt-build round cancel")
+        return self._text(cmd + ["--yes"])
 
     def _rerun(self, args):
         rnd = self._round_id(args.get("round"))

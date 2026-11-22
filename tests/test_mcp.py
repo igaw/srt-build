@@ -90,7 +90,8 @@ def test_tools_and_annotations(lab):
     tools = {t["name"]: t for t in resp["result"]["tools"]}
     for name in ("boards", "tests", "rounds", "round_status", "round_compare"):
         assert tools[name]["annotations"]["readOnlyHint"], name
-    for name in ("lava", "round_start", "round_rerun", "round_drop"):
+    for name in ("lava", "round_start", "round_repeat", "round_cancel",
+                 "round_rerun", "round_drop"):  # fmt: skip
         assert tools[name]["annotations"]["destructiveHint"], name
     assert all(not t["inputSchema"]["additionalProperties"] for t in tools.values())
 
@@ -263,3 +264,36 @@ def test_srt_build_mcp(tmp_path):
     assert [m["id"] for m in out] == [1, 2, 3]
     assert "lava" in [t["name"] for t in out[1]["result"]["tools"]]
     assert "bbb" in out[2]["result"]["structuredContent"]["boards"]
+
+
+def test_round_start_batch(lab):
+    ok(lab.server(), "round_start", tree="v6.12-rt", count=3, priority="40")
+    assert lab.runs[-1][0] == ["round", "start", "--count", "3",
+                               "--priority", "40", "--dry-run"]  # fmt: skip
+    assert "count" in error(lab.server(), "round_start", tree="v6.12-rt", count=0)
+    assert "priority" in error(
+        lab.server(), "round_start", tree="v6.12-rt", priority="urgent"
+    )
+
+
+def test_repeat_and_cancel(lab):
+    ok(lab.server(), "round_repeat", round="15", count=5, notes="baseline")
+    assert "--allow-submit" in error(
+        lab.server(), "round_repeat", round="15", dry_run=False
+    )
+    s = lab.server(allow_submit=True)
+    ok(s, "round_repeat", round="15", test=True, dry_run=False, yes=True)
+    ok(lab.server(), "round_cancel", batch="16")
+    assert "--allow-submit" in error(
+        lab.server(), "round_cancel", round="16", dry_run=False
+    )
+    ok(s, "round_cancel", round="16", dry_run=False)
+    assert "not both" in error(s, "round_cancel", round="16", batch="16")
+    assert [a for a, _ in lab.runs] == [
+        ["round", "repeat", "15", "--notes", "baseline", "--count", "5",
+         "--dry-run"],
+        ["round", "repeat", "15", "--test", "--yes"],
+        ["round", "cancel", "--batch", "16", "--dry-run"],
+        ["round", "cancel", "16", "--yes"],
+    ]  # fmt: skip
+    assert lab.tasks == []

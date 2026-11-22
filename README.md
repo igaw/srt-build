@@ -220,11 +220,14 @@ Its tools run srt-build itself, without a terminal:
   round with the installed kernels, a dry run unless asked otherwise)
   run as tasks, which outlive the client, one per tree;
   `task_status` and `tasks` follow them;
-- `round_rerun`, `round_drop`.
+- `round_repeat` (a round's jobs again; `count`: a batch of rounds,
+  priority low), `round_cancel` (a round's or batch's jobs not
+  finished), `round_rerun`, `round_drop`.
 
 Whoever starts the server decides what the agent may do to the lab:
-`lava`, a real `round_start` and `round_rerun` take the boards and
-need `--allow-submit`; a real `round_drop` needs `--allow-delete`.
+`lava`, a real `round_start`, `round_repeat`, `round_cancel` and
+`round_rerun` need `--allow-submit`; a real `round_drop` needs
+`--allow-delete`.
 Without them the agent gets told to ask. The tasks' logs are in
 `~/.local/state/srt-build/mcp`.
 

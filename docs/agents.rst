@@ -24,13 +24,19 @@ Its tools run srt-build itself, without a terminal:
 ``task_status``, ``tasks``
     Follow the tasks: running, finished with exit code, or lost, and the
     end of the log (``~/.local/state/srt-build/mcp``).
+``round_repeat``, ``round_cancel``
+    Submit a round's jobs again as the next round (``count``: several
+    rounds in one go, a batch, priority low; ``round_start`` takes
+    ``count`` and ``priority`` too); cancel the jobs of a round or batch
+    which haven't finished. Both a dry run unless asked otherwise.
 ``round_rerun``, ``round_drop``
     Replace a job of a round; remove a round (a dry run unless asked
     otherwise).
 
 Whoever starts the server decides what the agent may do to the lab:
-``lava``, a real ``round_start`` and ``round_rerun`` take the boards and
-need ``--allow-submit``; a real ``round_drop`` needs ``--allow-delete``.
+``lava``, a real ``round_start``, ``round_repeat``, ``round_cancel`` and
+``round_rerun`` need ``--allow-submit``; a real ``round_drop`` needs
+``--allow-delete``.
 Without them the agent is told to ask.
 
 The repository has a Claude Code skill, ``.claude/skills/rt-lab``, for
