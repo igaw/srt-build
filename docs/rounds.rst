@@ -33,6 +33,9 @@ carries ``srt.round`` in its metadata.
   $ srt-build round wait                # until all have finished
   $ srt-build round rerun 13 961        # a lab failure: run the job again
   $ srt-build round repeat 15           # its jobs again, a new round (no tree)
+  $ srt-build round repeat 15 --count 5 # five rounds in one go, a batch
+  $ srt-build round wait --batch 16 --report   # each round, reported when done
+  $ srt-build round cancel --batch 16   # give the lab back: the jobs not finished
   $ srt-build round report              # fetch into the archive, the table
   $ srt-build round export              # to VictoriaMetrics, label round
   $ srt-build round compare 12 13       # max latency side by side
@@ -40,6 +43,27 @@ carries ``srt.round`` in its metadata.
 
 ``round list``, ``round status``, ``round compare`` and ``round report``
 print JSON with ``--json``.
+
+Batches of rounds
+-----------------
+
+``--count K`` (``round start`` and ``round repeat``) submits K rounds
+at once, the next K numbers, each a round of its own with ``batch:
+<first>`` in ``round.yaml``. LAVA runs a board's jobs by priority, then
+in the order submitted, so the rounds run back to back with nobody
+watching. Their jobs are priority ``low`` (``--priority``: ``low``,
+``medium``, ``high`` or 0-100), so other people's jobs go first. The
+disk check wants ``lava-disk-min-gb`` and ``lava-round-gb`` (1 GB) for
+each round after the first.
+
+``round wait --batch 16`` follows the batch round by round;
+``--report`` reports each round as soon as it has finished, while the
+later ones are still queued. A rerun of a job lands behind the rounds
+still queued; it counts in its own round as always. ``round cancel``
+cancels the jobs not finished; the rounds stay in the archive.
+
+Back to back measures one stretch of time; rounds spread over days
+also show what changes between them. Say which in ``--notes``.
 
 Running jobs by hand
 --------------------

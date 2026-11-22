@@ -178,3 +178,11 @@ round on the installed kernels, without rebuilding, in the kernel tree:
   $ srt-build round wait
   $ srt-build round report
   $ srt-build round export             # into VictoriaMetrics, the band follows
+
+Or five at once, unattended (a batch, priority low, see :doc:`rounds`):
+
+.. code-block:: console
+
+  $ srt-build round repeat 15 --count 5 --notes "baseline, back to back" --yes
+  $ srt-build round wait --batch 16 --report
+  $ srt-build round export --all       # the rounds not exported yet
