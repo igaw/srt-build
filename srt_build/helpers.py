@@ -437,6 +437,10 @@ def flavor_job_ctx(ctx, fl, job_ctx):
         job_ctx["round"] = str(rnd)
     else:
         job_ctx.pop("round", None)
+    # LAVA's priority: low, medium, high or 0-100 (round start --priority).
+    job_ctx["priority"] = getattr(getattr(ctx, "args", None), "priority", None) or (
+        "medium"
+    )
     # Never empty: grep -vE "" would drop every line.
     job_ctx["kernel_log_known"] = "|".join(KNOWN_KERNEL_WARNINGS) or "^$"
     job_ctx["kernel_args"] = flavor_kernel_args(ctx, fl)

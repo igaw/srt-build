@@ -286,3 +286,23 @@ def test_round_in_metadata(monkeypatch, rnd):
     for path, tctx in _templates("rt", job_ctx):
         md = yaml.safe_load(generate_job(JOBS, path, tctx))["metadata"]
         assert md.get("srt.round") == rnd
+
+
+def test_priority(monkeypatch):
+    """A job is medium unless the command gives a priority (round start
+    --priority, low for a batch of rounds)."""
+    monkeypatch.setattr(config, "flavors", CFG.get("flavors") or {})
+    board = "c2d"
+    path = os.path.join(JOBS, "rt", "smoke", "0006-pi-stress.jinja2")
+
+    def render(args):
+        ctx = SimpleNamespace(**{"hostname": board, "args": args,
+                                 **CFG["machine_config"][board]})  # fmt: skip
+        job_ctx = load_job_ctx(os.path.join(JOBS, "boards", board + ".yaml"))
+        job_ctx["tags"] = [board]
+        flavor_job_ctx(ctx, "rt", job_ctx)
+        return yaml.safe_load(generate_job(JOBS, path, job_ctx))["priority"]
+
+    assert render(SimpleNamespace()) == "medium"
+    assert render(SimpleNamespace(priority="low")) == "low"
+    assert render(SimpleNamespace(priority=30)) == 30

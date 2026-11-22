@@ -8,7 +8,8 @@ timeouts:
     minutes: 5
   connection:
     minutes: 5
-priority: medium
+{# low lets other people's jobs go first: round start/repeat --count. #}
+priority: {{ priority | default('medium') }}
 visibility: public
 tags: {{ tags }}
 {# What the job is, for `srt-build jobs export` and the dashboards; the
