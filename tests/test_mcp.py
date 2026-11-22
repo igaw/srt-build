@@ -278,6 +278,8 @@ def test_round_start_batch(lab):
 
 def test_repeat_and_cancel(lab):
     ok(lab.server(), "round_repeat", round="15", count=5, notes="baseline")
+    ok(lab.server(), "round_repeat", round="15", boards="rpi3-32",
+       tests="stress-ng-io,stress-ng-scheduler")  # fmt: skip
     assert "--allow-submit" in error(
         lab.server(), "round_repeat", round="15", dry_run=False
     )
@@ -292,6 +294,8 @@ def test_repeat_and_cancel(lab):
     assert [a for a, _ in lab.runs] == [
         ["round", "repeat", "15", "--notes", "baseline", "--count", "5",
          "--dry-run"],
+        ["round", "repeat", "15", "--boards", "rpi3-32", "--tests",
+         "stress-ng-io,stress-ng-scheduler", "--dry-run"],
         ["round", "repeat", "15", "--test", "--yes"],
         ["round", "cancel", "--batch", "16", "--dry-run"],
         ["round", "cancel", "16", "--yes"],

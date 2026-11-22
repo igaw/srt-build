@@ -374,10 +374,10 @@ class Server:
             Tool(
                 "round_repeat",
                 "Submit a round's jobs again as the next round (count: that "
-                "many rounds, a batch), the same kernels, boards and tests; "
-                "no tree. A dry run lists them; the real one needs "
-                "--allow-submit, and yes after the maintainer saw the "
-                "warnings.",
+                "many rounds, a batch), the same kernels, boards and tests, "
+                "or only some of them (boards, tests); no tree. A dry run "
+                "lists them; the real one needs --allow-submit, and yes "
+                "after the maintainer saw the warnings.",
                 {
                     "properties": {
                         "round": rnd["round"],
@@ -387,6 +387,15 @@ class Server:
                             "description": "as test rounds (t1, t2, ...)",
                         },
                         "notes": {"type": "string"},
+                        "boards": {
+                            "type": "string",
+                            "description": "only these boards, e.g. rpi3-32,rpi3-64",
+                        },
+                        "tests": {
+                            "type": "string",
+                            "description": "only these tests, e.g. "
+                            "stress-ng-io,stress-ng-scheduler",
+                        },
                         **batch,
                         "dry_run": {"type": "boolean", "default": True},
                         "yes": {
@@ -701,6 +710,7 @@ class Server:
         if self._bool(args, "test", False):
             cmd.append("--test")
         cmd += self._notes(args) + self._batch(args)
+        cmd += self._list(args, "boards") + self._list(args, "tests")
         if self._bool(args, "dry_run", True):
             return self._text(cmd + ["--dry-run"])
         self._need(self.opts.allow_submit, "--allow-submit", "srt-build round repeat")

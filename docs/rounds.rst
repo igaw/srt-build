@@ -34,6 +34,8 @@ carries ``srt.round`` in its metadata.
   $ srt-build round rerun 13 961        # a lab failure: run the job again
   $ srt-build round repeat 15           # its jobs again, a new round (no tree)
   $ srt-build round repeat 15 --count 5 # five rounds in one go, a batch
+  $ srt-build round repeat 15 --tests stress-ng-io --boards rpi3-64
+                                        # only those of its jobs
   $ srt-build round wait --batch 16 --report   # each round, reported when done
   $ srt-build round cancel --batch 16   # give the lab back: the jobs not finished
   $ srt-build round report              # fetch into the archive, the table

@@ -104,6 +104,12 @@ def add_parsers(sub):
     p.add_argument("round", help="the round to repeat: 12 (release), t3 (test)")
     p.add_argument("--test", action="store_true", help="as a test round")
     p.add_argument("--notes", help="a line about the round (default: repeat of N)")
+    p.add_argument(
+        "--boards", help="only the jobs of these boards, e.g. rpi3-32,rpi3-64"
+    )
+    p.add_argument(
+        "--tests", help="only these tests, e.g. stress-ng-io,stress-ng-scheduler"
+    )
     add_batch_args(p)
     p.add_argument(
         "--dry-run", action="store_true", help="list the jobs, submit nothing"
@@ -478,15 +484,48 @@ def repeat_dry_run(src, jobs, count):
         print(f"  would submit again: {j}  {e['board']}  {e['flavor']}  {e['test']}")
 
 
+def _names(value):
+    return [v.strip() for v in value.split(",") if v.strip()] if value else []
+
+
+def selected_jobs(src, boards=None, tests=None):
+    """The counted jobs of src on these boards and of these tests (all
+    if not given); an unknown board or test stops."""
+    boards, tests = _names(boards), _names(tests)
+    jobs = counted_jobs(src)
+    for what, wanted, key in (("board", boards, "board"), ("test", tests, "test")):
+        have = {src["jobs"][j][key] for j in jobs}
+        unknown = [w for w in wanted if w not in have]
+        if unknown:
+            raise SystemExit(
+                f"round {src['round']} has no {what} {', '.join(unknown)} "
+                f"(it has: {', '.join(sorted(have))})"
+            )
+    jobs = [
+        j
+        for j in jobs
+        if (not boards or src["jobs"][j]["board"] in boards)
+        and (not tests or src["jobs"][j]["test"] in tests)
+    ]
+    if not jobs:
+        raise SystemExit(f"round {src['round']} has no such jobs")
+    return jobs
+
+
+def repeat_notes(rid, boards=None, tests=None):
+    """The default notes of a repeat: what it repeats, and of it."""
+    only = ", ".join(_names(tests) + _names(boards))
+    return f"repeat of {rid}" + (f" ({only})" if only else "")
+
+
 def cmd_round_repeat(args, system_config, machine_config):
     archive = archive_path(system_config)
     count, priority = batch_of(args)
     src = load_round(archive, parse_round(args.round))
     api = LavaApi.from_config(system_config)
     check_instance(src, system_config, api)
-    jobs = counted_jobs(src)
-    if not jobs:
-        raise SystemExit(f"round {src['round']} has no jobs")
+    boards, tests = getattr(args, "boards", None), getattr(args, "tests", None)
+    jobs = selected_jobs(src, boards, tests)
     kind = TEST if args.test else RELEASE
     rids = following(next_round(archive, kind), count)
     check_free(archive, rids)
@@ -498,10 +537,10 @@ def cmd_round_repeat(args, system_config, machine_config):
         test_definitions=src.get("test_definitions"),
     )
     info.update(
-        boards=list(src.get("boards") or []),
+        boards=sorted({src["jobs"][j]["board"] for j in jobs}),
         submissions=list(src.get("submissions") or []),
         repeats=src["round"],
-        notes=args.notes or f"repeat of {src['round']}",
+        notes=args.notes or repeat_notes(src["round"], boards, tests),
         batch=rids[0] if count > 1 else None,
         priority=priority,
     )

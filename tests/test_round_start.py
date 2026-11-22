@@ -436,3 +436,29 @@ def test_repeat_batch(lab, monkeypatch, capsys):
     rpc.definitions.clear()
     repeat(priority="30")
     assert yaml.safe_load(rpc.definitions[0])["priority"] == 30
+
+
+def test_repeat_some(lab, monkeypatch, capsys):
+    """round repeat --boards/--tests: only those jobs of N, notes say so."""
+    imported(lab)
+    src = archive.load_round(str(lab.top), "12")
+    assert cmd_round_start.selected_jobs(src) == [1, 2, 3]
+    assert cmd_round_start.selected_jobs(src, "bbb", "cyclictest") == [1, 2]
+    with pytest.raises(SystemExit, match="no board rpi3-32 .it has: bbb, c2d"):
+        cmd_round_start.selected_jobs(src, "bbb,rpi3-32")
+    with pytest.raises(SystemExit, match="no test stress-ng-io"):
+        cmd_round_start.selected_jobs(src, tests="stress-ng-io")
+    rpc = FakeRpc(0)
+    ids = iter(range(21, 40))
+    rpc.submit = lambda d: rpc.definitions.append(d) or [next(ids)]
+    monkeypatch.setattr(cmd_round_start, "rpc_from_lavacli", lambda **kw: rpc)
+    args = SimpleNamespace(
+        round="12", test=True, notes=None, dry_run=False, yes=False,
+        boards="c2d", tests="cyclictest", count=2,
+    )  # fmt: skip
+    cmd_round_start.cmd_round_repeat(args, lab.cfg, {})
+    assert "1 jobs" in capsys.readouterr().out
+    for rid, job in (("t1", 21), ("t2", 22)):
+        info = archive.load_round(str(lab.top), rid)
+        assert list(info["jobs"]) == [job] and info["boards"] == ["c2d"]
+        assert info["notes"] == "repeat of 12 (cyclictest, c2d)"

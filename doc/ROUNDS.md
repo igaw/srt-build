@@ -229,7 +229,8 @@ duration.
 commands/cmd_round*.py; what `lava` shares with them in rounds.py).
 All but `start` run without the kernel tree (`repeat` too).
 
-- `round repeat N [--test] [--notes] [--dry-run] [--yes]`: round N's
+- `round repeat N [--test] [--notes] [--boards B,..] [--tests T,..]
+  [--dry-run] [--yes]`: round N's
   counted jobs again, as the next round; each definition from LAVA,
   unchanged but `metadata: srt.round`, so the same kernels (by URL),
   boards and tests. Copies kernel, srt_build, test_definitions, boards,
@@ -237,6 +238,11 @@ All but `start` run without the kernel tree (`repeat` too).
   on low LAVA disk; no kernel tree, no lavacli (XML-RPC).
   `--count K` and `--priority P` as for `round start`; without
   `--priority` a single repeat keeps the definitions' priority.
+  `--boards` and `--tests` repeat only those of N's jobs (an unknown
+  name stops; `boards` and the default notes say which), e.g. the
+  classes that showed a problem, to check a fix in a fraction of the
+  lab time: `round repeat t1 --test --count 5 --boards rpi3-32,rpi3-64
+  --tests stress-ng-io,stress-ng-scheduler`.
 - `round start [--boards ...] [--round N] [--test] [--skip-build] [--notes]
   [--dry-run] [--yes]`
   - Before submitting: prints round, srt-build version, kernel, boards
