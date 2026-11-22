@@ -185,3 +185,75 @@ def test_api_retries_proxy_errors(monkeypatch):
     answers[:] = [urllib.error.HTTPError("u", 404, "Not Found", {}, None)]
     with pytest.raises(urllib.error.HTTPError):
         api.job(8)
+
+
+def batch(lab):
+    """Rounds 12 (jobs 1-3, finished) and 13 (jobs 4-5, running), a batch."""
+    imported(lab)
+    for j in (4, 5):
+        lab.lava.jobs[j] = lava_fake.job(j, "c2d", state="Running", round="13")
+    cmd_round_report.cmd_round_import(SimpleNamespace(round="13", ids="4,5"),
+                                      lab.cfg, {})  # fmt: skip
+    for rid in ("12", "13"):
+        info = archive.load_round(str(lab.top), rid)
+        info["batch"] = "12"
+        archive.save_round(str(lab.top), info)
+
+
+def test_wait_batch_report(lab, capsys):
+    """round wait --batch 12 --report: each round, reported when done."""
+    batch(lab)
+    capsys.readouterr()
+    order = []
+
+    def finish(seconds):  # round 12 is reported before 13 finishes
+        order.append(archive.load_round(str(lab.top), "12").get("reported"))
+        for j in (4, 5):
+            lab.lava.jobs[j].update(state="Finished", health="Complete")
+
+    args = SimpleNamespace(round=None, batch="12", interval=1, report=True,
+                           keep_uploads=True)  # fmt: skip
+    cmd_round_status.cmd_round_wait(args, lab.cfg, {}, sleep=finish)
+    out = capsys.readouterr().out
+    assert out.index("round 12: 3 jobs finished") < out.index("round 13: 2 jobs")
+    assert order and order[0]  # 12 was reported while 13 still ran
+    for rid in ("12", "13"):
+        assert archive.load_round(str(lab.top), rid).get("reported")
+    with pytest.raises(SystemExit, match="not both"):
+        cmd_round_status.cmd_round_wait(
+            SimpleNamespace(round="12", batch="12", interval=1), lab.cfg, {}
+        )
+    with pytest.raises(SystemExit, match="no rounds of batch 7"):
+        cmd_round_status.cmd_round_wait(
+            SimpleNamespace(round=None, batch="7", interval=1), lab.cfg, {}
+        )
+
+
+def test_cancel(lab, monkeypatch, capsys):
+    batch(lab)
+    canceled = []
+    rpc = SimpleNamespace(scheduler=SimpleNamespace(
+        jobs=SimpleNamespace(cancel=canceled.append)))  # fmt: skip
+    monkeypatch.setattr(cmd_round_status, "rpc_from_lavacli", lambda **kw: rpc)
+
+    def cancel(**kw):
+        args = {"round": None, "batch": None, "dry_run": False, "yes": False}
+        cmd_round_status.cmd_round_cancel(SimpleNamespace(**{**args, **kw}),
+                                          lab.cfg, {})  # fmt: skip
+
+    capsys.readouterr()
+    cancel(batch="12", dry_run=True)
+    out = capsys.readouterr().out
+    assert "13  4  c2d" in out and "13  5  c2d" in out and "12  1" not in out
+    assert canceled == []
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO("n\n"))
+    with pytest.raises(SystemExit, match="nothing canceled"):
+        cancel(round="13")
+    cancel(batch="12", yes=True)
+    assert canceled == [4, 5]
+    assert "2 jobs canceled; the rounds stay in the archive" in (
+        capsys.readouterr().out
+    )
+    cancel(round="12")
+    assert "no job left to cancel" in capsys.readouterr().out
+    assert archive.round_ids(str(lab.top)) == ["12", "13"]

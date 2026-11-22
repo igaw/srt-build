@@ -2,6 +2,8 @@
 
   srt-build round start [--test] [--dry-run]  submit a round (kernel tree)
   srt-build round status [N] / round wait [N] follow it
+  srt-build round wait --batch N --report   a batch of rounds, report each
+  srt-build round cancel N | --batch N      cancel the jobs not finished
   srt-build round rerun N JOB               replace a job of it
   srt-build round compare A B               line up two rounds
   srt-build round import 12 --ids 912-965   backfill a round that ran
@@ -24,6 +26,7 @@ import sys
 from ..archive import (
     RELEASE,
     archive_path,
+    batch_rounds,
     counted_jobs,
     is_complete,
     load_round,
@@ -86,6 +89,26 @@ def pick_round(args, system_config):
         if rid is None:
             raise SystemExit(f"no rounds in {archive}")
     return archive, parse_round(rid)
+
+
+def add_batch_arg(p):
+    p.add_argument(
+        "--batch",
+        help="every round of this batch (round start/repeat --count): its first",
+    )
+
+
+def pick_rounds(args, system_config):
+    """(archive, [round ids]): the round of the command, or with --batch
+    the rounds of that batch."""
+    batch = getattr(args, "batch", None)
+    if batch is None:
+        archive, rid = pick_round(args, system_config)
+        return archive, [rid]
+    if getattr(args, "round", None) is not None:
+        raise SystemExit("a round or --batch, not both")
+    archive = archive_path(system_config)
+    return archive, batch_rounds(archive, batch)
 
 
 def confirm(question, yes=False):

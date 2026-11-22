@@ -281,6 +281,18 @@ All but `start` run without the kernel tree (`repeat` too).
   is Finished; one line per job that finishes not Complete, as it
   happens; a warning when the disk runs low. Exit 1 if a job ended not
   Complete.
+  - `--batch B`: every round of batch B, one after the other in their
+    order (a later round finishing first is noticed when its turn
+    comes), a line per round as it finishes.
+  - `--report [--keep-uploads]`: `round report` of each round once it
+    has finished, so the results come in while the later rounds are
+    still queued; exit 1 on problems too. A batch unattended, e.g. on
+    nitrogen: `round repeat 15 --count 5 --yes`, then `round wait
+    --batch 16 --report`, then `round export --all`.
+- `round cancel [N | --batch B] [--dry-run] [--yes]`: cancel (XML-RPC
+  `scheduler.jobs.cancel`) the jobs of the round, or of every round of
+  the batch, that haven't finished, after listing them and asking. The
+  rounds stay in the archive with what ran; `round drop` removes one.
 - `round rerun N JOB`: resubmit JOB's definition unchanged (it carries
   `srt.round`) through XML-RPC (`lava_api.rpc_from_lavacli`), record
   `reruns: {JOB: NEW}`; `reported` is cleared. For lab failures; the

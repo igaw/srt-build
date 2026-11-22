@@ -1,13 +1,23 @@
-"""round status and round wait - follow a round in LAVA.
+"""round status, round wait and round cancel - follow a round in LAVA.
 
   srt-build round status [N]        state and health of every job
   srt-build round wait [N]          until every job has finished
+  srt-build round wait --batch N --report   each round of a batch
+  srt-build round cancel N | --batch N      the jobs not finished
 
-Both ask LAVA (jobs the archive has whole are read from there). A job
+They ask LAVA (jobs the archive has whole are read from there). A job
 a rerun replaced is shown with its replacement and waited for no
 longer. `round wait` prints a line for every job that finishes not
 Complete, as it happens, warns when the LAVA server's disk runs low,
 and exits with 1 if a job ended not Complete; then `round report`.
+With --batch it waits for the rounds of a batch (round start/repeat
+--count) one after the other, in their order; --report reports each
+round (`round report`) once it has finished, while the later ones are
+still queued, and exits with 1 on problems too.
+
+`round cancel` cancels the jobs of a round, or of every round of a
+batch, which haven't finished, asking first; the rounds stay in the
+archive (`round drop` removes one).
 """
 
 import sys
@@ -15,9 +25,18 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from ..archive import ArchiveApi, counted_jobs, load_round, round_dir
-from ..lava_api import LavaApi
+from ..lava_api import LavaApi, rpc_from_lavacli
 from ..rounds import check_instance
-from .cmd_round import add_json_arg, add_round_arg, pick_round, print_json
+from .cmd_round import (
+    add_batch_arg,
+    add_json_arg,
+    add_round_arg,
+    confirm,
+    pick_round,
+    pick_rounds,
+    print_json,
+)
+from .cmd_round_report import add_keep_uploads, report_round
 from .cmd_round_start import LAVA_DISK_MIN_GB, lava_free_gb
 
 
@@ -28,8 +47,23 @@ def add_parsers(sub):
     p.set_defaults(func=cmd_round_status)
     p = sub.add_parser("wait", help="wait until every job of a round finished")
     add_round_arg(p)
+    add_batch_arg(p)
     p.add_argument("--interval", type=int, default=60, help="seconds between polls")
+    p.add_argument(
+        "--report",
+        action="store_true",
+        help="round report each round once it has finished",
+    )
+    add_keep_uploads(p)
     p.set_defaults(func=cmd_round_wait)
+    p = sub.add_parser("cancel", help="cancel the jobs of a round not finished")
+    add_round_arg(p)
+    add_batch_arg(p)
+    p.add_argument(
+        "--dry-run", action="store_true", help="list the jobs, cancel nothing"
+    )
+    p.add_argument("--yes", action="store_true", help="don't ask")
+    p.set_defaults(func=cmd_round_cancel)
 
 
 def job_states(api, rdir, job_ids):
@@ -97,11 +131,25 @@ def cmd_round_status(args, system_config, machine_config):
 
 
 def cmd_round_wait(args, system_config, machine_config, sleep=time.sleep):
-    archive, rid = pick_round(args, system_config)
+    archive, rids = pick_rounds(args, system_config)
     api = LavaApi.from_config(system_config)
+    failed = False
+    for rid in rids:
+        failed |= bool(wait_round(api, archive, rid, args, system_config, sleep))
+        if getattr(args, "report", False):
+            info = load_round(archive, rid)
+            keep = getattr(args, "keep_uploads", False)
+            summaries = report_round(api, system_config, archive, info, keep)
+            failed |= any(s.problems() for s in summaries)
+    if failed:
+        sys.exit(1)
+
+
+def wait_round(api, archive, rid, args, system_config, sleep):
+    """Until every job of the round finished; the jobs not Complete."""
     check_instance(load_round(archive, rid), system_config, api)
     limit = int(system_config.get("lava-disk-min-gb", LAVA_DISK_MIN_GB))
-    done, bad, disk_warned = {}, [], False
+    done, disk_warned = {}, False
     while True:
         info = load_round(archive, rid)  # a rerun may have come in
         todo = [j for j in counted_jobs(info) if j not in done]
@@ -118,7 +166,6 @@ def cmd_round_wait(args, system_config, machine_config, sleep=time.sleep):
             if health != "Complete":
                 e = info["jobs"][jid]
                 print(f"job {jid} {e['board']} {e['flavor']} {e['test']}: {health}")
-                bad.append(jid)
         left = [j for j in counted_jobs(info) if j not in done]
         if not left:
             break
@@ -130,5 +177,32 @@ def cmd_round_wait(args, system_config, machine_config, sleep=time.sleep):
     counted = counted_jobs(info)
     bad = [j for j in counted if done.get(j) != "Complete"]
     print(f"round {rid}: {len(counted)} jobs finished, {len(bad)} not Complete")
-    if bad:
-        sys.exit(1)
+    sys.stdout.flush()
+    return bad
+
+
+def cmd_round_cancel(args, system_config, machine_config):
+    archive, rids = pick_rounds(args, system_config)
+    api = LavaApi.from_config(system_config)
+    todo = []
+    for rid in rids:
+        info = load_round(archive, rid)
+        check_instance(info, system_config, api)
+        states = job_states(api, round_dir(archive, rid), counted_jobs(info))
+        for jid, (state, _) in sorted(states.items()):
+            if state not in ("Finished", "Canceling"):
+                todo.append((rid, jid, info["jobs"][jid], state))
+    if not todo:
+        print(f"round {', '.join(rids)}: no job left to cancel")
+        return
+    for rid, jid, e, state in todo:
+        print(f"{rid}  {jid}  {e['board']:8} {e['flavor']:12} {e['test']:24} {state}")
+    if getattr(args, "dry_run", False):
+        return
+    if not confirm(f"cancel these {len(todo)} jobs?", getattr(args, "yes", False)):
+        raise SystemExit("nothing canceled")
+    rpc = rpc_from_lavacli(identity=system_config.get("lava-identity", "default"))
+    for _, jid, _, _ in todo:
+        rpc.scheduler.jobs.cancel(jid)
+    print(f"{len(todo)} jobs canceled; the rounds stay in the archive "
+          f"(round drop removes one)")  # fmt: skip
