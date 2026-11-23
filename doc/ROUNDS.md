@@ -283,10 +283,25 @@ All but `start` run without the kernel tree (`repeat` too).
 - `round status [N]` (default: the round started last): per job state
   and health from LAVA (from the archive for whole jobs), the rerun
   mapping, free disk on the LAVA server.
-- `round wait [N] [--interval S]`: block until every job (after reruns)
-  is Finished; one line per job that finishes not Complete, as it
-  happens; a warning when the disk runs low. Exit 1 if a job ended not
-  Complete.
+- `round wait [N] [--interval S] [--quiet]`: block until every job
+  (after reruns) is Finished; one line per job that finishes not
+  Complete, as it happens; a warning when the disk runs low. Exit 1 if
+  a job ended not Complete.
+  - Progress (`progress.py`), per poll: `round 20: 31/54 finished (1
+    not Complete), 2 running, 21 queued, 3h12m so far, about 2h40m
+    left`. On a terminal one line updated in place (`\r`, the failures
+    and warnings above it), else a plain line when the counts change
+    and at least every 30 minutes. `--quiet`: none, as before.
+  - The estimate: a board runs its jobs one after the other, the
+    boards side by side, so the board with the most left. A job takes
+    as long as in the newest earlier round of the archive with the same
+    board, flavor and test (`start_time` to `end_time` of its
+    job.json; rounds of the same kind first); a running one that minus
+    the time it runs already; a job without history the median of its
+    board's known ones. No estimate when a board has none at all.
+  - With `--batch`: the round and the batch (`batch 20, round 21 (2 of
+    5): ...; batch 9/30 finished, 3h so far, about 6h left`); the later
+    rounds' jobs are asked for at most every 5 minutes.
   - `--batch B`: every round of batch B, one after the other in their
     order (a later round finishing first is noticed when its turn
     comes), a line per round as it finishes.

@@ -60,7 +60,15 @@ watching. Their jobs are priority ``low`` (``--priority``: ``low``,
 disk check wants ``lava-disk-min-gb`` and ``lava-round-gb`` (1 GB) for
 each round after the first.
 
-``round wait --batch 16`` follows the batch round by round;
+``round wait`` shows where the round is: finished, running and queued
+jobs, the time so far and about how long is left, from how long the
+same jobs took in earlier rounds (on a terminal in one line, updated in
+place; ``--quiet`` turns it off)::
+
+  round 20: 31/54 finished (1 not Complete), 2 running, 21 queued, 3h12m so far, about 2h40m left
+
+``round wait --batch 16`` follows the batch round by round, with the
+batch's totals;
 ``--report`` reports each round as soon as it has finished, while the
 later ones are still queued. A rerun of a job lands behind the rounds
 still queued; it counts in its own round as always. ``round cancel``

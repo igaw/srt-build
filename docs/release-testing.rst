@@ -67,7 +67,10 @@ uses those kernels.
   $ srt-build round wait               # until every job finished
   $ srt-build round report             # fetch into the archive, the table
 
-``round wait`` prints every job which finishes not Complete, as it does.
+``round wait`` prints every job which finishes not Complete, as it does,
+and shows the round's progress: finished, running and queued jobs, the
+time so far and about how long is left (from the same jobs in earlier
+rounds).
 A lab failure (the board didn't power on, the network dropped): submit the
 job again with ``srt-build round rerun 13 <job>``; the new job replaces it.
 
@@ -155,7 +158,10 @@ it with the release round before and decides. sh runs the lines without
 the last line's, the compare's. So ``round wait --report`` exiting 1 for
 the known flags (a max latency above 1 ms) doesn't fail the test, only a
 regression or a job not Complete does. ``srt test`` waits as long as the
-round runs, hours: run it in ``tmux`` or ``screen``. To only submit, keep
+round runs, hours: run it in ``tmux`` or ``screen``. Meanwhile it shows
+``round wait``'s progress line (``srt test`` leaves the terminal to the
+command), e.g. ``round 20: 31/54 finished, 2 running, 21 queued, 3h12m
+so far, about 2h40m left``. To only submit, keep
 the ``round start`` line alone and run the other two later yourself.
 
 ``srt test`` passes a file in ``$SRT_TEST_RESULT``; ``--result`` writes

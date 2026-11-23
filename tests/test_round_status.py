@@ -419,3 +419,159 @@ def test_result_summary_names_the_first_three():
         "round 2 (k) against 1: 4 jobs, 4 regressions (b0 rt t +50 %, "
         "b1 rt t +51 %, b2 rt t +52 %, ...), 1 job not Complete"
     )
+
+
+# progress of round wait
+
+
+class FakeTTY(__import__("io").StringIO):
+    def isatty(self):
+        return True
+
+
+def test_duration_and_line():
+    from srt_build.progress import duration, wait_line
+
+    assert [duration(s) for s in (40, 185, 2700, 11520)] == [
+        "40s", "3m05s", "45m", "3h12m"
+    ]  # fmt: skip
+    assert wait_line("20", (31, 54, 1, 2, 21), 11520, 9600) == (
+        "round 20: 31/54 finished (1 not Complete), 2 running, 21 queued, "
+        "3h12m so far, about 2h40m left"
+    )
+    assert wait_line("20", (3, 6, 0, 1, 2), None, None, ("20", 2, 5)) == (
+        "batch 20, round 20 (2 of 5): 3/6 finished, 1 running, 2 queued"
+    )
+
+
+def test_jobs_left():
+    from srt_build.progress import jobs_left
+
+    history = {("bbb", "rt", "a"): 600, ("bbb", "rt", "b"): 1200,
+               ("c2d", "rt", "a"): 300}  # fmt: skip
+    now = 10_000
+    jobs = [
+        ("bbb", "rt", "a", "Running", now - 200),  # 400 left
+        ("bbb", "rt", "b", "Submitted", None),  # 1200
+        ("c2d", "rt", "a", "Submitted", None),  # 300
+    ]
+    assert jobs_left(jobs, history, now) == 1600  # bbb, the longest board
+    # running longer than last time: nothing left, not negative
+    assert jobs_left([("c2d", "rt", "a", "Running", now - 900)], history, now) == 0
+    # a test without history: the median of the board's known ones
+    assert jobs_left([("bbb", "nohz", "x", "Submitted", None)], history, now) == 900
+    # a board nothing is known of: no estimate
+    assert jobs_left([("rpi3-64", "rt", "a", "Submitted", None)], history, now) is None
+
+
+def test_progress_plain_and_tty():
+    from srt_build.progress import Progress
+
+    t = [0]
+    out = __import__("io").StringIO()
+    p = Progress(out=out, now=lambda: t[0])
+    p.show("a 1/2", key=1)
+    p.show("a 1/2, 1m so far", key=1)  # same counts: not again
+    t[0] = 1799
+    p.show("a 1/2, 30m so far", key=1)
+    t[0] = 1800  # half an hour without a line: again
+    p.show("a 1/2, 30m so far", key=1)
+    p.show("a 2/2", key=2)
+    assert out.getvalue().splitlines() == ["a 1/2", "a 1/2, 30m so far", "a 2/2"]
+
+    tty = FakeTTY()
+    p = Progress(out=tty)
+    p.show("x 1/2")
+    p.message("job 5: Incomplete")
+    p.show("x 2/2")
+    p.clear()
+    assert tty.getvalue() == (
+        "\rx 1/2\x1b[K" "\r\x1b[K" "job 5: Incomplete\n" "\rx 1/2\x1b[K"
+        "\rx 2/2\x1b[K" "\r\x1b[K"
+    )  # fmt: skip
+    quiet = __import__("io").StringIO()
+    Progress(out=quiet, quiet=True).show("nothing")
+    assert quiet.getvalue() == ""
+
+
+def timed(job, start, minutes):
+    """job with LAVA's start and end time, minutes long."""
+    from datetime import datetime, timedelta, timezone
+
+    t = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc) + timedelta(minutes=start)
+    job["start_time"] = t.strftime("%Y-%m-%dT%H:%M:%S.0Z")
+    job["end_time"] = (t + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S.0Z")
+    return job
+
+
+def test_wait_progress(lab, monkeypatch, capsys):
+    """round wait: the counts, the time so far and, from round 12's job
+    durations, the time left."""
+    from srt_build.progress import parse_time
+
+    for j, (board, minutes) in {1: ("bbb", 20), 2: ("c2d", 30)}.items():
+        lab.lava.jobs[j] = timed(lava_fake.job(j, board, round="12"), 0, minutes)
+    cmd_report = cmd_round_report.cmd_round_import
+    cmd_report(SimpleNamespace(round="12", ids="1,2"), lab.cfg, {})
+    # round 13, a day later: bbb's job runs since 5 minutes, c2d's waits
+    lab.lava.jobs[3] = lava_fake.job(3, "bbb", state="Running", round="13")
+    lab.lava.jobs[4] = lava_fake.job(4, "c2d", state="Submitted", round="13")
+    info = archive.new_round("13", "lava.test")
+    info["started"] = "2026-11-14T12:00:00Z"
+    info["jobs"] = {
+        j: {"board": b, "flavor": "rt", "test": "cyclictest"}
+        for j, b in ((3, "bbb"), (4, "c2d"))
+    }
+    archive.save_round(str(lab.top), info)
+    now = parse_time("2026-11-14T13:00:00Z")
+    lab.lava.jobs[3]["start_time"] = "2026-11-14T12:55:00Z"
+    monkeypatch.setattr(cmd_round_status, "clock", lambda: now)
+    capsys.readouterr()
+
+    polls = []
+
+    def finish(seconds):
+        polls.append(seconds)
+        if len(polls) == 2:  # the third poll: all done
+            for j in (3, 4):
+                lab.lava.jobs[j].update(state="Finished", health="Complete")
+
+    args = SimpleNamespace(round="13", interval=1)
+    cmd_round_status.cmd_round_wait(args, lab.cfg, {}, sleep=finish)
+    out = capsys.readouterr().out.splitlines()
+    # not a terminal: the line once, the same counts don't repeat it
+    assert out == [
+        "round 13: 0/2 finished, 1 running, 1 queued, 1h00m so far, " "about 30m left",
+        "round 13: 2 jobs finished, 0 not Complete",
+    ]
+    # --quiet: only the result
+    args = SimpleNamespace(round="13", interval=1, quiet=True)
+    cmd_round_status.cmd_round_wait(args, lab.cfg, {}, sleep=finish)
+    assert capsys.readouterr().out == "round 13: 2 jobs finished, 0 not Complete\n"
+
+
+def test_wait_progress_tty_no_history(lab, monkeypatch):
+    """On a terminal the line is drawn in place; without any history
+    there is no estimate."""
+    imported(lab)
+    lab.lava.jobs[5] = lava_fake.job(5, "rpi3-64", state="Running")
+    info = archive.load_round(str(lab.top), "12")
+    info["jobs"][5] = {"board": "rpi3-64", "flavor": "rt", "test": "cyclictest"}
+    archive.save_round(str(lab.top), info)
+    tty = FakeTTY()
+    monkeypatch.setattr("sys.stdout", tty)
+
+    def finish(seconds):
+        lab.lava.jobs[5].update(state="Finished", health="Incomplete")
+
+    with pytest.raises(SystemExit):
+        cmd_round_status.cmd_round_wait(
+            SimpleNamespace(round="12", interval=1), lab.cfg, {}, sleep=finish
+        )
+    out = tty.getvalue()
+    assert "\rround 12: 3/4 finished, 1 running, 0 queued" in out
+    assert "left" not in out
+    # the failure goes above the line, which is drawn again; cleared
+    # before the result
+    assert "\r\x1b[Kjob 5 rpi3-64 rt cyclictest: Incomplete\n\rround 12" in out
+    assert out.endswith("\x1b[K\r\x1b[Kround 12: 4 jobs finished, 1 not Complete\n")
