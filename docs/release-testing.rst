@@ -126,9 +126,10 @@ quilt refresh`` and test again.
 With srt test
 -------------
 
-stable-rt-tools runs the test itself: ``srt test`` runs ``TEST_COMMAND``
-of its ``srt.conf`` with ``sh -c`` in the worktree of the series, and
-its exit code is the test's result. For srt-build, in the group of the
+stable-rt-tools runs the test itself: ``srt test`` runs the phases of
+its ``srt.conf`` one after the other with ``sh -c`` in the worktree of
+the series: ``TEST_COMMAND`` (submit), ``TEST_WAIT`` and ``TEST_CHECK``,
+whose exit code is the test's result. For srt-build, in the group of the
 series (or ``[DEFAULT]`` for all series), with srt-build in a checkout
 of its own at ``~/rt/srt-build`` (``srt-build`` alone if it is on
 ``PATH``):
@@ -141,28 +142,35 @@ of its own at ``~/rt/srt-build`` (``srt-build`` alone if it is on
    TEST_COMMAND =
        cd {worktree}
        $HOME/rt/srt-build/srt-build round start --notes "{tag}" --yes
+   TEST_WAIT =
        $HOME/rt/srt-build/srt-build round wait --report
+   TEST_CHECK =
        $HOME/rt/srt-build/srt-build round compare --check --result "$SRT_TEST_RESULT"
 
 ``{worktree}`` and ``{tag}`` are srt's placeholders, ``$HOME`` and
 ``$SRT_TEST_RESULT`` are left to ``sh``. ``srt test --dry-run`` in the
-worktree of the series shows the lines for the release and runs
+worktree of the series shows the three phases for the release and runs
 nothing.
 
 ``round start --yes`` builds, installs and submits the release round
 without asking (``--notes`` with the release, ``{tag}``, e.g.
 ``v6.12.119-rt25``). ``round wait --report`` waits for the round started
 last and fetches it into the archive; ``round compare --check`` compares
-it with the release round before and decides. sh runs the lines without
-``set -e``: a line that fails doesn't stop the next, and the exit code is
-the last line's, the compare's. So ``round wait --report`` exiting 1 for
-the known flags (a max latency above 1 ms) doesn't fail the test, only a
-regression or a job not Complete does. ``srt test`` waits as long as the
-round runs, hours: run it in ``tmux`` or ``screen``. Meanwhile it shows
-``round wait``'s progress line (``srt test`` leaves the terminal to the
-command), e.g. ``round 20: 31/54 finished, 2 running, 21 queued, 3h12m
-so far, about 2h40m left``. To only submit, keep
-the ``round start`` line alone and run the other two later yourself.
+it with the release round before and decides: only a regression or a
+job not Complete fails it. ``round wait --report`` exits with 1 for the
+known flags (a max latency above 1 ms), which doesn't stop the check.
+
+The phases make the day a round takes safe to interrupt: ``srt test``
+notes each phase in its history, and run again it skips a submit and a
+wait that succeeded for this release, so it never submits the round
+twice; ``srt test --check`` runs only the comparison again (e.g. after a
+``round rerun``), ``srt test --again`` submits once more on purpose.
+Run it in ``tmux`` or ``screen``: it waits as long as the round runs,
+and shows ``round wait``'s progress line meanwhile (``srt test`` leaves
+the terminal to the commands), e.g. ``round 20: 31/54 finished, 2
+running, 21 queued, 3h12m so far, about 2h40m left``. Without
+``TEST_WAIT`` ``srt test`` returns after the submit; run it again when
+the round is done, it goes on with the check.
 
 While ``round start`` builds, ``srt test`` shows where it is: the plan
 (``building 14 kernels: ...``), per kernel ``build 3/14: rpi3-64 nohz
