@@ -2,7 +2,7 @@ device_type: 'bcm2837-rpi-3-b'
 kernel_url: 'http://lava.lan:8080/artifacts/rpi3-64/rpi3-64-image'
 kernel_type: 'image'
 dtb_url: 'http://lava.lan:8080/artifacts/rpi3-64/bcm2837-rpi-3-b-plus.dtb'
-nfsroot_url: 'http://lava.lan:8080/artifacts/rootfs-2026.11.09/lava-image.aarch64-1.tar.xz'
+nfsroot_url: 'http://lava.lan:8080/lava-artifacts/rootfs-2026.11.22/lava-image.aarch64-1.tar.xz'
 boot_method: 'u-boot'
 
 #test_definitions_url: '/var/lib/lava/artifacts/test-definitions.git'

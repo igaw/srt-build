@@ -419,8 +419,18 @@ faults. On rpi3-64 under the memory class (hack job 754,
 cyclictest without `-m` 133 ms, with `-m` 0.9 ms, rtla with
 `mlockall()` in its user-space threads 0.9 ms and no faults. The fix is
 posted upstream (rtla/timerlat: Lock the memory of the user-space
-threads). Until a kernel with it is in the lab, read the stress tests'
-**Thr** column (kernel side): it does not depend on rtla's memory.
+threads).
+
+Fixed in the lab since rootfs-2026.11.22 (kiwi-lava 3d140bb): the
+image has rtla with that patch from OBS (home:wagi:branches:benchmark,
+until Tumbleweed's rtla has it), on all three arches; its `BUILDINFO`
+names the OBS project of each rtla. Checked on rpi3-32 and rpi3-64,
+kernel v6.12.118-rt24: in rounds 15-19 (old rootfs) the user-space
+column of the io and scheduler classes went to 10-21 ms in 7 of 15
+jobs, with the patched rtla (test rounds t13-t18, nitrogen's archive)
+in none of 18; `u` stays at most about 150 us above `t`. The `u`
+column (and so the job's maximum) of stress jobs in rounds before the
+new rootfs is not reliable: read `t` and `i` there.
 
 The price: each measuring process (rtla forks one per CPU) locks a
 resident copy of rtla's whole memory, about 25 MB on rpi3-64. mlockall()
@@ -432,7 +442,7 @@ killer's likely choice (hack job 771); the rounds have no OOM stressors.
 
 ## A reliable setup first: stress-ng classes at 1 ms and above
 
-Status: open (2026-11-21). Before the rounds can judge the RT patches,
+Status: open (2026-11-21); kind A solved (2026-11-23), kind B open. Before the rounds can judge the RT patches,
 the lab and test setup must be reliable: every high latency explained
 either as the kernel's or as the test's. The stress-ng classes reach
 far higher absolute values than every other test, which raised the
@@ -463,13 +473,16 @@ stay at 230-480 us.
 
 Two kinds:
 
-- **A. User space only, 10-20 ms** (rpi3-64 io, rpi3-32 scheduler),
-  while the same job's kernel side stays below 1 ms. Intermittent:
+- **A. User space only, 10-20 ms** (rpi3-64 io, rpi3-32 scheduler).
+  Solved: rtla's missing memory lock, gone with the patched rtla of
+  rootfs-2026.11.22 ("rtla does not lock its memory"). It came
+  while the same job's kernel side stayed below 1 ms. Intermittent:
   rpi3-64 io was 8.6, 20.0, 0.3 and 10.9 ms in rounds 12-16, rpi3-32
   scheduler 1.0, 0.9, 17.1 and 11.5 ms. For io this matches "rtla does
-  not lock its memory" (page faults of the user-space threads). For
-  the scheduler class it is less obvious: a stressor that preempts the
-  measuring thread is as likely.
+  not lock its memory" (page faults of the user-space threads). The
+  scheduler class was less obvious (a stressor preempting the
+  measuring thread was as likely), but its spikes went away with the
+  patched rtla too.
 - **B. The kernel side itself at 0.8-1 ms on both Pis** under the
   memory, scheduler and os classes, against 350-420 us under the
   stress mix. Either a stressor that interferes with the measurement
@@ -488,6 +501,9 @@ investigation while repeat rounds run.
    times each: the spikes are intermittent. Locked stays below 1 ms:
    setup; until a kernel with the rtla fix is in the lab, judge the
    stress classes by `t` and `i`. Locked spikes too: go on with step 2.
+   Done (2026-11-23): setup. Five repeat rounds of the io, scheduler
+   and memory classes on both Pis with the patched rtla (t14-t18, plus
+   t13) had no spike, against 7 of 15 jobs before.
 2. **One stressor at a time (kind B, and A on scheduler).** Run every
    stressor of the memory, scheduler and os classes on its own next to
    the measurement on rpi3-32 and rpi3-64 (`contrib/hack/stress-ng-hunt.sh`

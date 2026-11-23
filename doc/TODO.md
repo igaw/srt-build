@@ -7,8 +7,8 @@ kernel and its tuning go to `TUNING.md` ("Open questions").
 
 The base work before anything else: every high latency of the stress-ng
 classes explained as the kernel's or the test's. Flagged tests, the two
-kinds (rtla user space only, 10-20 ms; the kernel side at 1 ms on the
-Pis) and the plan (locked memory, one stressor at a time, kernel or
+kinds (rtla user space only, 10-20 ms: solved, the patched rtla of
+rootfs-2026.11.22; the kernel side at 1 ms on the Pis: open) and the plan (locked memory, one stressor at a time, kernel or
 PREEMPT_RT, report the kernel side apart): TUNING.md, "A reliable
 setup first". Tooling it needs here: the kernel side (`t`, `i`) apart
 from rtla's user space (`u`) in `round report` and the dashboards.
@@ -88,16 +88,6 @@ outside the repository (a sync loop over the running hack jobs, a
 watcher, a summary of the class-run stops). `jobs hack` should copy an
 output directory off by itself, before the session ends, and those
 scripts belong in `contrib/hack/`.
-
-## rtla with locked memory on armv7
-
-Until a kernel with the rtla mlock fix is in the lab, the stress runs'
-Usr column on bbb and rpi3-32 includes page faults of rtla's own
-threads (TUNING.md, "rtla does not lock its memory"). The patched rtla
-exists for arm64 and x86; building it for armv7 failed (no
-arch/arm/Makefile in the tools build, ld crashing under emulation).
-Either build it natively on an armv7 board or carry the patch in the
-rootfs (kiwi-lava). Meanwhile read the Thr column on those boards.
 
 ## rtla histogram range
 
