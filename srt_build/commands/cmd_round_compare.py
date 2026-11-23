@@ -17,8 +17,14 @@ jobs that started last before B. --check exits with 1 on a regression
 or when a job of B is not Complete or not in the archive: the pass or
 fail of a release test (stable-rt-tools `srt test`). Problems `round
 report` flags in both rounds alike (e.g. a max latency above 1 ms) don't
-fail it on their own.
+fail it on their own. --result FILE writes that result as JSON for srt
+test (status pass or fail, a summary line, the rounds, the regressions
+and, with grafana-url in the configuration, the rounds-compared
+dashboard of both).
 """
+
+import json
+import os
 
 import sys
 
@@ -33,6 +39,7 @@ from ..archive import (
     round_ids,
     round_kind,
 )
+from ..grafana import COMPARE_UID
 from ..metrics import definition_workloads, job_labels
 from ..report import summarize_job
 from .cmd_round import add_json_arg, print_json
@@ -61,6 +68,12 @@ def add_parsers(sub):
         "--check",
         action="store_true",
         help="exit 1 on a regression or a job of B not Complete",
+    )
+    p.add_argument(
+        "--result",
+        metavar="FILE",
+        help="write the result as JSON to FILE, for srt test "
+        '(--result "$SRT_TEST_RESULT"); empty: none',
     )
     add_json_arg(p)
     p.set_defaults(func=cmd_round_compare)
@@ -214,6 +227,54 @@ def summary_line(regressions, bad):
     return ", ".join(words)
 
 
+def _regression_text(r):
+    what = " ".join(r[k] for k in KEY if r[k])
+    return f"{what} {r['change_percent']:+.0f} %"
+
+
+def result_summary(rows, a, b, kernel, jobs, bad, most=3):
+    """One line: 'round 20 (v6.12.119-rt25) against 19: 54 jobs, no
+    regressions', or the regressions named (the first most)."""
+    regs = [r for r in rows if r["regression"]]
+    text = f"round {b} ({kernel}) against {a}: {jobs} jobs, "
+    text += summary_line(len(regs), [])
+    if regs:
+        named = ", ".join(_regression_text(r) for r in regs[:most])
+        text += " (" + named + (", ..." if len(regs) > most else "") + ")"
+    if bad:
+        text += f", {len(bad)} job{'s' if len(bad) != 1 else ''} not Complete"
+    return text
+
+
+def compare_url(system_config, a, b):
+    """The rounds-compared dashboard of a and b, None without grafana-url."""
+    base = str(system_config.get("grafana-url") or "").rstrip("/")
+    if not base:
+        return None
+    return f"{base}/d/{COMPARE_UID}?var-round_a={a}&var-round_b={b}"
+
+
+def write_result(path, system_config, rows, a, b, kernel, jobs, bad):
+    """The result for srt test, as JSON in path."""
+    regs = [r for r in rows if r["regression"]]
+    result = {
+        "status": "fail" if regs or bad else "pass",
+        "summary": result_summary(rows, a, b, kernel, jobs, bad),
+        "round": str(b),
+        "against": str(a),
+        "regressions": regs,
+        "not_complete": bad,
+    }
+    url = compare_url(system_config, a, b)
+    if url:
+        result["url"] = url
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(result, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
 def print_compare(rows, only_a, only_b, a, b, problems, bad, kernels):
     print(f"round {b} ({kernels[1]}) against {a} ({kernels[0]})\n")
     print("\n".join(compare_lines(rows, a, b)))
@@ -242,6 +303,10 @@ def cmd_round_compare(args, system_config, machine_config):
     rows, only_a, only_b = compare_rows(ra, rb, min_percent, min_us)
     kernels = tuple(load_round(archive, r).get("kernel") or "-" for r in (a, b))
     regressions = sum(r["regression"] for r in rows)
+    result = getattr(args, "result", None)
+    if result:
+        jobs = len(counted_jobs(load_round(archive, b)))
+        write_result(result, system_config, rows, a, b, kernels[1], jobs, bad)
     if getattr(args, "json", False):
         print_json(compare_json(rows, only_a, only_b, a, b, (pa, pb), bad, kernels))
     else:

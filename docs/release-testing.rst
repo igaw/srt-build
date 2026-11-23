@@ -131,7 +131,7 @@ its exit code is the test's result. For srt-build:
        cd {worktree}
        srt-build round start --notes "{tag}" --yes
        srt-build round wait --report
-       srt-build round compare --check
+       srt-build round compare --check --result "$SRT_TEST_RESULT"
 
 ``round start --yes`` builds, installs and submits the release round
 without asking (``--notes`` with the release, ``{tag}``, e.g.
@@ -144,6 +144,16 @@ the known flags (a max latency above 1 ms) doesn't fail the test, only a
 regression or a job not Complete does. ``srt test`` waits as long as the
 round runs, hours: run it in ``tmux`` or ``screen``. To only submit, keep
 the ``round start`` line alone and run the other two later yourself.
+
+``srt test`` passes a file in ``$SRT_TEST_RESULT``; ``--result`` writes
+the compare's result there as JSON: ``status`` (``pass`` or ``fail``), a
+one-line ``summary`` ("round 20 (v6.12.119-rt25) against 19: 54 jobs, no
+regressions", or the regressions named), the two rounds, the regressions
+and, with ``grafana-url`` in srt-build's configuration, the ``url`` of
+the "RT rounds compared" dashboard of both. srt shows the summary and the
+link in ``srt status`` and keeps them in its log (``srt log``). Without
+``SRT_TEST_RESULT`` (the command run by hand) the argument is empty and
+nothing is written.
 
 With an agent
 -------------

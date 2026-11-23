@@ -327,7 +327,14 @@ All but `start` run without the kernel tree (`repeat` too).
   is the pass or fail of a release test (stable-rt-tools `srt test`).
   `--json`: `rows` (each with `regression`), `regressions`,
   `regression_count`, `only_a`, `only_b`, `not_complete`, `kernels`,
-  `problems`.
+  `problems`. `--result FILE` writes the result for srt test as JSON:
+  `status` (`pass`/`fail`, as `--check` decides, with or without it),
+  `summary` (one line: "round 20 (v6.12.119-rt25) against 19: 54 jobs,
+  no regressions", or the first three regressions named), `round`,
+  `against`, `regressions` (rows as in `--json`), `not_complete`, and
+  `url`, the "RT rounds compared" dashboard of both rounds, when
+  `grafana-url` is in `system_config` (e.g. `http://grafana.lan:3000`).
+  An empty FILE (srt's `SRT_TEST_RESULT` unset) writes nothing.
 - `round export [N | --all] [--dry-run] [--force]`: build the samples
   from the archive (`metrics.job_samples(job, tests, summary, uploads)`
   with everything read from files), add the labels `round` and

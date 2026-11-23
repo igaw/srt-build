@@ -357,3 +357,62 @@ def test_compare_check_not_complete(lab, capsys):
         )
     assert exc.value.code == 1
     assert "no regressions, 1 job not Complete" in capsys.readouterr().out
+
+
+def test_compare_result_file(lab, tmp_path, capsys):
+    rounds(
+        lab,
+        ("12", False, {1: ("bbb", 60), 2: ("c2d", 42)}),
+        ("13", False, {5: ("bbb", 90), 6: ("c2d", 42)}),
+        ("14", False, {7: ("bbb", 91), 8: ("c2d", 43)}),
+    )
+    path = tmp_path / "result.json"
+    # fail: bbb 60 -> 90, no grafana-url, no url
+    with pytest.raises(SystemExit):
+        cmd_round_compare.cmd_round_compare(
+            SimpleNamespace(a="12", b="13", check=True, result=str(path)),
+            lab.cfg,
+            {},
+        )
+    res = json.loads(path.read_text())
+    assert res["status"] == "fail" and "url" not in res
+    assert res["round"] == "13" and res["against"] == "12"
+    assert res["summary"] == (
+        "round 13 (v6.12.117-rt23) against 12: 2 jobs, 1 regression "
+        "(bbb rt cyclictest hackbench +50 %)"
+    )
+    assert [r["board"] for r in res["regressions"]] == ["bbb"]
+    assert res["regressions"][0]["regression"] is True
+    # pass, with the dashboard; without --check too
+    cfg = {**lab.cfg, "grafana-url": "http://grafana.test:3000/"}
+    cmd_round_compare.cmd_round_compare(
+        SimpleNamespace(a="14", b=None, result=str(path)), cfg, {}
+    )
+    res = json.loads(path.read_text())
+    assert res["status"] == "pass" and res["regressions"] == []
+    assert res["summary"] == (
+        "round 14 (v6.12.117-rt23) against 13: 2 jobs, no regressions"
+    )
+    assert res["url"] == (
+        "http://grafana.test:3000/d/rt-rounds-compared" "?var-round_a=13&var-round_b=14"
+    )
+    # an empty FILE (SRT_TEST_RESULT unset) writes nothing
+    path.unlink()
+    cmd_round_compare.cmd_round_compare(
+        SimpleNamespace(a="14", b=None, result=""), lab.cfg, {}
+    )
+    assert not path.exists()
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_result_summary_names_the_first_three():
+    rows = [
+        {"board": f"b{i}", "flavor": "rt", "test": "t", "workload": "",
+         "change_percent": 50.0 + i, "regression": True}
+        for i in range(4)
+    ]  # fmt: skip
+    text = cmd_round_compare.result_summary(rows, "1", "2", "k", 4, ["x"])
+    assert text == (
+        "round 2 (k) against 1: 4 jobs, 4 regressions (b0 rt t +50 %, "
+        "b1 rt t +51 %, b2 rt t +52 %, ...), 1 job not Complete"
+    )
