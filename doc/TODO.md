@@ -124,7 +124,27 @@ push):
   must be the same tree as `{tag}` (compare the tree hash, as srt quilt
   release does with -rebase).
 
-srt-build then needs:
+Or don't move the build, only the compiling (probably the simplest):
+
+- **Distributed compiling: icecream (icecc), or distcc.** nitrogen keeps
+  building and installing; the compile jobs go to the other machines
+  (`CC="icecc ..."`, a high `make -j`). No git transfer, no internal
+  repository, no change to how rounds start. icecream's scheduler picks
+  the least busy machine and ships the compiler along (the helpers
+  don't need the cross toolchains installed); distcc needs the same
+  compiler versions on every helper. srt-build: put the wrapper in
+  front of the compiler in run_make (`CC`/`CROSS_COMPILE`), a
+  system_config switch, and `-j` from the cluster's size.
+- **ccache** on nitrogen, with or without the above: a stable update
+  changes few files, so the same flavor's next build comes mostly from
+  the cache; between flavors only partly (autoconf.h differs, ccache's
+  preprocessor mode still hits the files the options don't touch).
+  `CCACHE_BASEDIR` for the per-flavor build directories,
+  `CCACHE_NOHASHDIR`, about 20 GB of cache. build-times.json shows what
+  it saves per board and flavor. ccache 4 can share its cache over HTTP
+  or Redis (`remote_storage`) with a later build machine.
+
+srt-build needs, to move the whole build:
 
 - A build-only round step (`round build`, or `lava --no-submit`): build
   and install every flavor of config.yml rounds on the build machine
