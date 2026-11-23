@@ -16,7 +16,11 @@ and after each board. --dry-run renders every job and submits nothing.
 It first builds and installs, per board, every flavor the submissions
 use, each once, all before the first job: a failed build stops with
 nothing submitted and no round in the archive. --skip-build submits
-with the kernels installed already, as lava --skip-build does.
+with the kernels installed already, as lava --skip-build does. It says
+where the builds are: the plan, a line before and after each build
+with the count and, from the last builds' durations (build-times.json,
+progress.py), about how long is left; then the submissions and the
+total time.
 
 `round rerun N JOB` submits JOB's definition again, unchanged (it
 carries srt.round), for a lab failure: the new job replaces JOB in
@@ -38,6 +42,8 @@ lava-round-gb for every round after the first.
 """
 
 import argparse
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -60,8 +66,9 @@ from ..archive import (
     save_round,
 )
 from .. import helpers
-from ..helpers import Context, srt_build_version
+from ..helpers import Context, get_flavors, srt_build_version
 from ..lava_api import LavaApi, rpc_from_lavacli
+from ..progress import BuildProgress, build_times_path, clock, duration
 from ..rounds import (
     add_jobs,
     check_instance,
@@ -376,7 +383,20 @@ def submission_command(sub):
     return " ".join(words)
 
 
-def build_board(board, subs, rid, system_config, machine_config, kernel_config):
+def build_plan(boards, subs, rid, system_config, machine_config):
+    """[(board, flavor)]: the kernels round start builds, in order."""
+    plan = []
+    for board in boards:
+        for sub in subs:
+            ctx = Context(board_args(board, sub, rid), machine_config, system_config)
+            with contextlib.redirect_stdout(io.StringIO()):  # "Skipping flavor"
+                flavors = get_flavors(ctx, builds_only=True)
+            plan += [(board, f) for f in flavors if (board, f) not in plan]
+    return plan
+
+
+def build_board(board, subs, rid, system_config, machine_config, kernel_config,
+                progress=None):  # fmt: skip
     """Build and install every flavor of the board's submissions, once."""
     from .cmd_lava import cmd_lava
 
@@ -386,6 +406,7 @@ def build_board(board, subs, rid, system_config, machine_config, kernel_config):
         ctx_args = board_args(board, sub, rid)
         ctx_args.skip_build = False
         ctx_args.built = built
+        ctx_args.build_progress = progress
         ctx = Context(ctx_args, machine_config, system_config)
         ctx.submit = recording_submit([], True)
         cmd_lava(ctx, system_config, kernel_config)
@@ -431,17 +452,25 @@ def cmd_round_start(args, system_config, machine_config, kernel_config):
         return
     submit_anyway(warnings, args.yes)
     helpers.ensure_lavacli_available()
+    began = clock()
     if build:
+        plan = build_plan(info["boards"], subs, rid, system_config, machine_config)
+        progress = BuildProgress(plan, build_times_path(system_config))
+        progress.announce()
         for board in info["boards"]:
             build_board(board, subs, rid, system_config, machine_config,
-                        kernel_config)  # fmt: skip
+                        kernel_config, progress)  # fmt: skip
+        print(f"built {len(progress.done)} kernels in {duration(progress.took())}")
 
     for one in each_round(archive, info, rids):
+        print(f"submitting round {one['round']}: {', '.join(one['boards'])}, "
+              f"{len(subs)} submissions each")  # fmt: skip
         for board in one["boards"]:
             for i, sub in enumerate(subs):
                 submit_board(board_args(board, sub, one["round"], priority),
                              one, i, system_config, machine_config,
                              kernel_config)  # fmt: skip
+    print(f"round start took {duration(clock() - began)}")
 
 
 def cmd_round_rerun(args, system_config, machine_config):

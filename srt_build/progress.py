@@ -251,3 +251,65 @@ def builds_left(times, builds):
             return None
         total += seconds
     return total
+
+
+class BuildProgress:
+    """round start's build phase: a line before and after each build,
+    with the count and, from build-times.json, about how long is left.
+    The builds' own output (make's errors) goes between the lines."""
+
+    def __init__(self, plan, path, out=None):
+        self.plan = list(plan)  # [(board, flavor)] in build order
+        self.path = path
+        self.out = out or sys.stdout
+        self.times = load_build_times(path)
+        self.started = 0
+        self.done = []
+        self.t0 = None
+        self.began = clock()
+
+    def say(self, text):
+        print(text, file=self.out, flush=True)
+
+    def announce(self):
+        """building 14 kernels: bbb rt, ll, nohz, up, vp; c2d ..."""
+        per_board = {}
+        for board, flavor in self.plan:
+            per_board.setdefault(board, []).append(flavor)
+        boards = "; ".join(f"{b} {', '.join(f)}" for b, f in per_board.items())
+        text = f"building {len(self.plan)} kernels: {boards}"
+        left = builds_left(self.times, self.plan)
+        if left is not None:
+            text += f" (about {duration(left)})"
+        self.say(text)
+
+    def start(self, board, flavor):
+        self.started += 1
+        text = f"build {self.started}/{len(self.plan)}: {board} {flavor}"
+        last = self.times.get(f"{board} {flavor}")
+        if last is not None:
+            text += f" (last time {duration(last)})"
+        self.say(text)
+        self.t0 = clock()
+
+    def installing(self, board, flavor):
+        self.say(f"installing {board} {flavor}")
+
+    def finish(self, board, flavor):
+        seconds = clock() - (self.t0 if self.t0 is not None else clock())
+        save_build_time(self.path, board, flavor, seconds)
+        self.times[f"{board} {flavor}"] = seconds
+        self.done.append((board, flavor))
+        text = (
+            f"built {board} {flavor} in {duration(seconds)} "
+            f"({len(self.done)} of {len(self.plan)} done"
+        )
+        rest = [b for b in self.plan if b not in self.done]
+        left = builds_left(self.times, rest)
+        if rest and left is not None:
+            text += f", about {duration(left)} left"
+        self.say(text + ")")
+
+    def took(self):
+        """Seconds since the build phase began."""
+        return clock() - self.began

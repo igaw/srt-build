@@ -252,6 +252,18 @@ All but `start` run without the kernel tree (`repeat` too).
     after a fetch), or when the LAVA server's free disk is below
     `lava-disk-min-gb` (10; `ssh <lava-ssh> df /var/lib/lava`, default
     `root@<instance>`; "unknown" if not reachable).
+  - The builds (progress.py): first the plan (`building 14 kernels:
+    bbb rt, ll, nohz, up, vp; c2d ...`), then per kernel `build 3/14:
+    rpi3-64 nohz (last time 6m12s)`, `installing rpi3-64 nohz` and
+    `built rpi3-64 nohz in 5m58s (3 of 14 done, about 40m left)`;
+    make's output stays as it was (only its errors). Each build's
+    duration (config, build, install) is kept per board and flavor in
+    `build-times.json` next to `base-build-path` (default
+    `~/.cache/srt-build/build-times.json`, written atomically, a broken
+    file is ignored); the estimate is the sum of the remaining builds'
+    last durations, none when one has no last duration. A --count batch
+    builds once. Then `submitting round 20: bbb, c2d, ...` per round and
+    at the end `round start took 1h02m`.
   - Writes `round.yaml` (without jobs) before the first submission.
   - Runs the submissions per board through `cmd_lava` itself
     (`--skip-build`), with the round in the job context; `cmd_lava`

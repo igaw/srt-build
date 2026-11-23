@@ -70,10 +70,17 @@ def build_flavor(ctx, fl, kernel_config):
             return
         built.add(fl)
     ctx.args.flavor = fl
+    progress = getattr(ctx.args, "build_progress", None)  # round start
+    if progress:
+        progress.start(ctx.args.machine, fl)
     cmd_config(ctx, kernel_config)
     if cmd_build(ctx):
         raise SystemExit(f"{ctx.hostname} {fl}: build failed, nothing installed")
+    if progress:
+        progress.installing(ctx.args.machine, fl)
     cmd_install(ctx)
+    if progress:
+        progress.finish(ctx.args.machine, fl)
 
 
 def extract_test_name(test_path, test_file):

@@ -164,6 +164,12 @@ command), e.g. ``round 20: 31/54 finished, 2 running, 21 queued, 3h12m
 so far, about 2h40m left``. To only submit, keep
 the ``round start`` line alone and run the other two later yourself.
 
+While ``round start`` builds, ``srt test`` shows where it is: the plan
+(``building 14 kernels: ...``), per kernel ``build 3/14: rpi3-64 nohz
+(last time 6m12s)`` and ``built rpi3-64 nohz in 5m58s (3 of 14 done,
+about 40m left)``, from the durations of the last builds; then the
+submissions and how long ``round start`` took.
+
 ``srt test`` passes a file in ``$SRT_TEST_RESULT``; ``--result`` writes
 the compare's result there as JSON: ``status`` (``pass`` or ``fail``), a
 one-line ``summary`` ("round 20 (v6.12.119-rt25) against 19: 54 jobs, no

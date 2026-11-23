@@ -1,6 +1,7 @@
 """round start, round rerun and a plain lava command (a test round),
 on fakes: nothing is submitted to a real LAVA."""
 
+import json
 import os
 from types import SimpleNamespace
 
@@ -462,3 +463,48 @@ def test_repeat_some(lab, monkeypatch, capsys):
         info = archive.load_round(str(lab.top), rid)
         assert list(info["jobs"]) == [job] and info["boards"] == ["c2d"]
         assert info["notes"] == "repeat of 12 (cyclictest, c2d)"
+
+
+def test_build_progress(lab, builds, monkeypatch, capsys):
+    """round start says where the builds are and remembers how long
+    each took, for the estimate next time; a broken file is ignored."""
+    from srt_build import progress
+
+    t = [0]
+
+    def tick():  # every look at the clock: a minute later
+        t[0] += 60
+        return t[0]
+
+    monkeypatch.setattr(progress, "clock", tick)
+    monkeypatch.setattr(cmd_round_start, "clock", tick)
+    times = progress.build_times_path(lab.cfg)
+    assert times == str(lab.top.parent / "build-times.json")
+    start(lab, skip_build=False)
+    out = capsys.readouterr().out
+    built = [f for s, f, _ in builds if s == "build"]
+    n = len(built)
+    assert f"building {n} kernels: c2d {', '.join(built)}\n" in out
+    assert f"build 1/{n}: c2d {built[0]}\ninstalling c2d {built[0]}\n" in out
+    assert f"built c2d {built[0]} in 1m00s (1 of {n} done)" in out
+    assert "submitting round 1: c2d, 2 submissions each" in out
+    assert "round start took " in out
+    with open(times) as f:
+        saved = json.load(f)
+    assert sorted(saved) == sorted(f"c2d {f}" for f in built)
+
+    # The next time: the last durations, and about how long is left.
+    start(lab, skip_build=False)
+    out = capsys.readouterr().out
+    assert f"building {n} kernels: c2d {', '.join(built)} (about {n}m" in out
+    assert f"build 1/{n}: c2d {built[0]} (last time 1m00s)" in out
+    assert f"(1 of {n} done, about {n - 1}m" in out
+
+    # A broken file: no estimate, and it's written anew.
+    with open(times, "w") as f:
+        f.write("{not json")
+    start(lab, skip_build=False)
+    out = capsys.readouterr().out
+    assert "last time" not in out and f"building {n} kernels: c2d" in out
+    with open(times) as f:
+        assert sorted(json.load(f)) == sorted(f"c2d {f}" for f in built)
