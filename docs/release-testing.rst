@@ -84,16 +84,22 @@ problem.
 .. code-block:: console
 
   $ srt-build round list               # the rounds, with their kernel
-  $ srt-build round compare 12 13      # rt23's round against rt24's
+  $ srt-build round compare            # the new round against the one before
+  $ srt-build round compare 12 13      # or any two: rt23's round against rt24's
 
 ``round compare`` lines up the max latency per board, flavor, test and
-workload of both rounds, with the change, and the jobs with problems of
-either. Judge it as `doc/TUNING.md
+workload of both rounds, with the change, what only one of them has,
+and the jobs with problems of either. Without rounds it takes the newest
+release round and the release round before it. It judges as `doc/TUNING.md
 <https://github.com/igaw/srt-build/blob/main/doc/TUNING.md>`_ says: the
 median changes 5-9 % from round to round, one test in ten up to 30-40 %,
-and small values (c2d) swing more in percent. Only a change beyond both
-about 40 % and 20 us is worth a look; then rerun the job, and if it stays,
-see :doc:`debugging`.
+and small values (c2d) swing more in percent, so only a change of at
+least 40 % and 20 us is marked "regression" (``compare-min-percent``,
+``compare-min-us`` in the configuration). For a regression rerun the
+job, and if it stays, see :doc:`debugging`. ``--check`` exits with 1 on
+a regression or a job of the new round not Complete; a problem ``round
+report`` flags in both rounds alike (a max latency above 1 ms on the
+Pis) doesn't fail it.
 
 5. Export
 ---------
@@ -111,6 +117,33 @@ check``, ``srt upload``, ``srt push`` and ``srt announce``.
 A problem in the kernel: ``srt quilt undo`` takes the release back as long
 as nothing is pushed; fix the patch queue, redo the release from ``srt
 quilt refresh`` and test again.
+
+With srt test
+-------------
+
+stable-rt-tools runs the test itself: ``srt test`` runs ``TEST_COMMAND``
+of its ``srt.conf`` with ``sh -c`` in the worktree of the series, and
+its exit code is the test's result. For srt-build:
+
+.. code-block:: ini
+
+   TEST_COMMAND =
+       cd {worktree}
+       srt-build round start --notes "{tag}" --yes
+       srt-build round wait --report
+       srt-build round compare --check
+
+``round start --yes`` builds, installs and submits the release round
+without asking (``--notes`` with the release, ``{tag}``, e.g.
+``v6.12.119-rt25``). ``round wait --report`` waits for the round started
+last and fetches it into the archive; ``round compare --check`` compares
+it with the release round before and decides. sh runs the lines without
+``set -e``: a line that fails doesn't stop the next, and the exit code is
+the last line's, the compare's. So ``round wait --report`` exiting 1 for
+the known flags (a max latency above 1 ms) doesn't fail the test, only a
+regression or a job not Complete does. ``srt test`` waits as long as the
+round runs, hours: run it in ``tmux`` or ``screen``. To only submit, keep
+the ``round start`` line alone and run the other two later yourself.
 
 With an agent
 -------------

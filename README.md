@@ -32,6 +32,7 @@ prune` drops them after `test-retention-days`.
     srt-build round report                # fetch into the archive, the table
     srt-build round export                # to VictoriaMetrics, label round
     srt-build round compare 12 13         # max latency side by side
+    srt-build round compare --check       # the newest against the one before
     srt-build round list                  # the rounds in the archive
 
 Without a round id the commands take the round started last; `12` is a

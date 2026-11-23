@@ -312,9 +312,22 @@ All but `start` run without the kernel tree (`repeat` too).
   is shown so and fetched next time; LAVA isn't asked at all when the
   archive has everything. Jobs replaced by a rerun and jobs not whole in
   the archive get a line under the table. Exit 1 on problems.
-- `round compare A B`: board, flavor, test and workload of two rounds
-  side by side (max latency, change in %), then the jobs with problems,
-  from the archive.
+- `round compare [A] [B] [--check] [--json]`: board, flavor, test and
+  workload both rounds have, side by side (max latency, change in %),
+  "regression" where B is above A by at least `compare-min-percent`
+  (40) and `compare-min-us` (20 us), TUNING.md's rule; then what only
+  one round has (not a regression), the jobs with problems of both and
+  B's jobs not Complete or not in the archive, from the archive. Its
+  first line names both rounds with their kernels, its last counts the
+  regressions. One round: it is B, A the round of B's kind (release or
+  test) with jobs that started last before it; none: the newest
+  release round against the one before. `--check` exits 1 on a
+  regression or a job of B not Complete: problems `round report` flags
+  in both rounds alike (a max latency above 1 ms) don't fail it, so it
+  is the pass or fail of a release test (stable-rt-tools `srt test`).
+  `--json`: `rows` (each with `regression`), `regressions`,
+  `regression_count`, `only_a`, `only_b`, `not_complete`, `kernels`,
+  `problems`.
 - `round export [N | --all] [--dry-run] [--force]`: build the samples
   from the archive (`metrics.job_samples(job, tests, summary, uploads)`
   with everything read from files), add the labels `round` and

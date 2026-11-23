@@ -275,13 +275,17 @@ class Server:
                 "round_compare",
                 "Two rounds side by side from the archive: max latency per "
                 "board, flavor, test and workload, the change in percent, "
-                "the problems of both.",
+                "regressions (B above A by 40 % and 20 us, doc/TUNING.md), "
+                "what only one has, the problems of both. Without b: a is "
+                "B, A the round of its kind before it; without both: the "
+                "newest release round against the one before. check: "
+                "passed false on a regression or a job of B not Complete.",
                 {
                     "properties": {
                         "a": {"type": "string", "description": "e.g. 12"},
                         "b": {"type": "string", "description": "e.g. t3"},
+                        "check": {"type": "boolean", "default": False},
                     },
-                    "required": ["a", "b"],
                 },
                 self._compare,
                 read_only=True,
@@ -628,9 +632,17 @@ class Server:
         return self._json(["round", "list"] + (["--test"] if test else []))
 
     def _compare(self, args):
-        a = self._round_id(args.get("a"), "a")
-        b = self._round_id(args.get("b"), "b")
-        return self._json(["round", "compare", a, b])
+        cmd = ["round", "compare"]
+        if args.get("b") is not None and args.get("a") is None:
+            raise ToolError("b needs a: a alone is the round to judge")
+        for key in ("a", "b"):
+            if args.get(key) is not None:
+                cmd.append(self._round_id(args[key], key))
+        if not self._bool(args, "check", False):
+            return self._json(cmd)
+        out = self._json(cmd + ["--check"], ok=(0, 1))
+        out["passed"] = not out["regression_count"] and not out["not_complete"]
+        return out
 
     def _report(self, args):
         keep = self._bool(args, "keep_uploads", False)

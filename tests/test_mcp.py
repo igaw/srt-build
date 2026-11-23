@@ -124,6 +124,28 @@ def test_read_tools(lab):
     ]
 
 
+def test_compare_defaults_and_check(lab):
+    s = lab.server()
+    ok(s, "round_compare")
+    ok(s, "round_compare", a="13")
+    check = '{"regression_count": 1, "not_complete": []}'
+    lab.answers[("round", "compare", "12", "13", "--check", "--json")] = Result(
+        1, check, ""
+    )
+    assert ok(s, "round_compare", a="12", b="13", check=True)["passed"] is False
+    lab.answers[("round", "compare", "--check", "--json")] = Result(
+        0, '{"regression_count": 0, "not_complete": []}', ""
+    )
+    assert ok(s, "round_compare", check=True)["passed"] is True
+    assert "b needs a" in error(s, "round_compare", b="13")
+    assert [a for a, _ in lab.runs] == [
+        ["round", "compare", "--json"],
+        ["round", "compare", "13", "--json"],
+        ["round", "compare", "12", "13", "--check", "--json"],
+        ["round", "compare", "--check", "--json"],
+    ]
+
+
 def test_bad_round(lab):
     for rnd in ("x", "12; rm", "-1"):
         assert "round like 12 or t3" in error(lab.server(), "round_status", round=rnd)

@@ -69,13 +69,17 @@ def test_compare(lab, capsys):
     capsys.readouterr()
     cmd_round_compare.cmd_round_compare(SimpleNamespace(a="12", b="t2"), lab.cfg, {})
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0].split() == ["board", "flavor", "test", "workload", "12", "t2",
+    assert lines[0] == "round t2 (v6.12.117-rt23) against 12 (v6.12.117-rt23)"
+    assert lines[2].split() == ["board", "flavor", "test", "workload", "12", "t2",
                                 "change"]  # fmt: skip
-    assert lines[1].split() == ["bbb", "rt", "cyclictest", "hackbench", "42", "63",
-                                "+50%"]  # fmt: skip
-    assert lines[2].split() == ["c2d", "rt", "cyclictest", "hackbench", "42", "21",
+    assert lines[3].split() == ["bbb", "rt", "cyclictest", "hackbench", "42", "63",
+                                "+50%", "regression"]  # fmt: skip
+    assert lines[4].split() == ["c2d", "rt", "cyclictest", "hackbench", "42", "21",
                                 "-50%"]  # fmt: skip
     assert "problems in round t2:" in lines
+    assert "not Complete in round t2:" in lines
+    assert lines[-1] == ("round t2 against 12: 1 regression, 1 job not Complete "
+                         "(regression: +40 % and +20 us)")  # fmt: skip
 
 
 def test_status_json(lab, capsys):
@@ -121,7 +125,11 @@ def test_compare_json(lab, capsys):
         "a": 42,
         "b": 63,
         "change_percent": 50.0,
+        "regression": True,
     }
+    assert out["regression_count"] == 1 and out["regressions"] == [out["rows"][0]]
+    assert out["not_complete"] == ["job 8 c2d cyclictest: Incomplete"]
+    assert out["only_a"] == out["only_b"] == []
     assert out["problems"]["t2"]
 
 
@@ -257,3 +265,95 @@ def test_cancel(lab, monkeypatch, capsys):
     cancel(round="12")
     assert "no job left to cancel" in capsys.readouterr().out
     assert archive.round_ids(str(lab.top)) == ["12", "13"]
+
+
+def rounds(lab, *spec):
+    """Import rounds: (round, test, {job id: (board, latency)})."""
+    for rid, test, jobs in spec:
+        for jid, (board, latency) in jobs.items():
+            lab.lava.jobs[jid] = lava_fake.job(jid, board)
+            lab.lava.latencies[jid] = latency
+        ids = ",".join(map(str, jobs))
+        cmd_round_report.cmd_round_import(
+            SimpleNamespace(round=rid, ids=ids, test=test), lab.cfg, {}
+        )
+
+
+def test_regression_edges():
+    reg = cmd_round_compare.is_regression
+    assert not reg(64, 89)  # +39 %, +25 us
+    assert not reg(47.5, 66.5)  # +40 %, +19 us
+    assert reg(60, 90)  # +50 %, +30 us
+    assert reg(50, 70)  # +40 %, +20 us: at the edge
+    assert not reg(90, 60) and not reg(0, 30) and not reg(42, None)
+    assert reg(60, 75, 20, 10) and not reg(60, 75)
+
+
+def test_compare_defaults(lab, capsys):
+    rounds(
+        lab,
+        ("12", False, {1: ("bbb", 60), 2: ("c2d", 42)}),
+        ("t1", True, {3: ("bbb", 60), 4: ("c2d", 42)}),
+        ("13", False, {5: ("bbb", 90), 6: ("c2d", 42)}),
+        ("t2", True, {7: ("bbb", 61), 8: ("c2d", 42)}),
+    )
+    path = str(lab.top)
+    assert cmd_round_compare.pick_rounds(path) == ("12", "13")
+    assert cmd_round_compare.pick_rounds(path, "13") == ("12", "13")
+    assert cmd_round_compare.pick_rounds(path, "t2") == ("t1", "t2")
+    assert cmd_round_compare.pick_rounds(path, "t2", "13") == ("t2", "13")
+    with pytest.raises(SystemExit, match="no round before 12"):
+        cmd_round_compare.pick_rounds(path, "12")
+    capsys.readouterr()
+    args = SimpleNamespace(a=None, b=None, check=True)
+    with pytest.raises(SystemExit) as exc:  # bbb 60 -> 90: +50 %, +30 us
+        cmd_round_compare.cmd_round_compare(args, lab.cfg, {})
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert out.startswith("round 13 (v6.12.117-rt23) against 12 (v6.12.117-rt23)")
+    assert "1 regression (" in out
+    # t2 against t1: +1 us, passes
+    cmd_round_compare.cmd_round_compare(
+        SimpleNamespace(a="t2", b=None, check=True), lab.cfg, {}
+    )
+    assert "round t2 against t1: no regressions" in capsys.readouterr().out
+    # without --check the regression only shows
+    cmd_round_compare.cmd_round_compare(SimpleNamespace(a=None, b=None), lab.cfg, {})
+    # the thresholds from the configuration
+    cfg = {**lab.cfg, "compare-min-percent": "60", "compare-min-us": "20"}
+    cmd_round_compare.cmd_round_compare(args, cfg, {})
+    assert "no regressions (regression: +60 % and +20 us)" in capsys.readouterr().out
+
+
+def test_compare_only_in_one(lab, capsys):
+    rounds(
+        lab,
+        ("12", False, {1: ("bbb", 42), 2: ("c2d", 42)}),
+        ("13", False, {5: ("bbb", 42), 6: ("rpi3-64", 900)}),
+    )
+    capsys.readouterr()
+    cmd_round_compare.cmd_round_compare(
+        SimpleNamespace(a="12", b="13", check=True, json=True), lab.cfg, {}
+    )
+    out = json.loads(capsys.readouterr().out)
+    assert [r["board"] for r in out["rows"]] == ["bbb"]
+    assert out["only_a"][0]["board"] == "c2d"
+    assert out["only_b"][0]["board"] == "rpi3-64"
+    assert out["regression_count"] == 0  # a test new in B is no regression
+    assert out["kernels"] == {"12": "v6.12.117-rt23", "13": "v6.12.117-rt23"}
+
+
+def test_compare_check_not_complete(lab, capsys):
+    rounds(lab, ("12", False, {1: ("bbb", 42)}))
+    lab.lava.jobs[5] = lava_fake.job(5, "bbb", health="Incomplete")
+    with pytest.raises(SystemExit):
+        cmd_round_report.cmd_round_import(
+            SimpleNamespace(round="13", ids="5", test=False), lab.cfg, {}
+        )
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as exc:
+        cmd_round_compare.cmd_round_compare(
+            SimpleNamespace(a="13", b=None, check=True), lab.cfg, {}
+        )
+    assert exc.value.code == 1
+    assert "no regressions, 1 job not Complete" in capsys.readouterr().out

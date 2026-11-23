@@ -41,6 +41,8 @@ carries ``srt.round`` in its metadata.
   $ srt-build round report              # fetch into the archive, the table
   $ srt-build round export              # to VictoriaMetrics, label round
   $ srt-build round compare 12 13       # max latency side by side
+  $ srt-build round compare --check     # newest release round against the one
+                                        # before: exit 1 on a regression
   $ srt-build round list                # the rounds in the archive
 
 ``round list``, ``round status``, ``round compare`` and ``round report``
