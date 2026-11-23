@@ -95,6 +95,44 @@ scripts belong in `contrib/hack/`.
 "over": bbb's Usr column had 4772 samples above 256 us in job 730,
 with no shape. A wider range (`-E`) would keep it.
 
+## Build on another machine (later: no fast machine yet)
+
+Ideas from 2026-11-23, for when a fast build machine is in the lab; until
+then everything builds on nitrogen. The release steps (srt queue, sign,
+upload, push) stay local with the maintainer's key; building and testing
+move. stable-rt-tools' `srt test` phases make the split possible:
+TEST_COMMAND builds and submits, TEST_WAIT and TEST_CHECK stay where the
+round archive is.
+
+Getting the release to the build machine (its tags are local until srt
+push):
+
+- **An internal git tree.** A `lab` repository on Forgejo (pot.lan) as a
+  remote of the work area; TEST_COMMAND pushes the series and the
+  release tags (`--force`: srt quilt undo makes the same tag again), the
+  build machine fetches and checks out `{tag}`. Keeps the signed tags
+  and the exact tree. Open: how the build machine reads it without a
+  credential on a test VM (homelab rule): anonymous read only inside the
+  LAN (check what git.lab.monom.org exposes), or nitrogen pushes into a
+  plain repository on the build machine (no Forgejo, no credential
+  there).
+- **No git transfer at all.** Everything is a patch queue: the build
+  machine takes the public upstream tree (stable, `{upstream}`), gets
+  the queue (`-patches` worktree, as tar or quilt series), applies it and
+  builds. No internal repository, nothing to synchronize but the
+  patches. Downside: the build isn't of our tags and tree; the result
+  must be the same tree as `{tag}` (compare the tree hash, as srt quilt
+  release does with -rebase).
+
+srt-build then needs:
+
+- A build-only round step (`round build`, or `lava --no-submit`): build
+  and install every flavor of config.yml rounds on the build machine
+  (toolchains, srt-build checkout, ssh to lava for the artifacts there).
+- `round start --skip-build` on nitrogen submits with the kernels just
+  installed, by the same names on both machines, and the round lands in
+  nitrogen's archive (round wait, compare).
+
 ## Secrets out of the repository
 
 The Artifactorial token is in `jobs/boards/*.yaml`, in a public
