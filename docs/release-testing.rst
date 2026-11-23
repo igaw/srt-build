@@ -125,15 +125,26 @@ With srt test
 
 stable-rt-tools runs the test itself: ``srt test`` runs ``TEST_COMMAND``
 of its ``srt.conf`` with ``sh -c`` in the worktree of the series, and
-its exit code is the test's result. For srt-build:
+its exit code is the test's result. For srt-build, in the group of the
+series (or ``[DEFAULT]`` for all series), with srt-build in a checkout
+of its own at ``~/rt/srt-build`` (``srt-build`` alone if it is on
+``PATH``):
 
 .. code-block:: ini
 
+   [linux/stable-rt/v6.12-rt]
+   PRJ_DIR = /pub/linux/kernel/projects/rt/6.12
+   WORKFLOW = quilt
    TEST_COMMAND =
        cd {worktree}
-       srt-build round start --notes "{tag}" --yes
-       srt-build round wait --report
-       srt-build round compare --check --result "$SRT_TEST_RESULT"
+       $HOME/rt/srt-build/srt-build round start --notes "{tag}" --yes
+       $HOME/rt/srt-build/srt-build round wait --report
+       $HOME/rt/srt-build/srt-build round compare --check --result "$SRT_TEST_RESULT"
+
+``{worktree}`` and ``{tag}`` are srt's placeholders, ``$HOME`` and
+``$SRT_TEST_RESULT`` are left to ``sh``. ``srt test --dry-run`` in the
+worktree of the series shows the lines for the release and runs
+nothing.
 
 ``round start --yes`` builds, installs and submits the release round
 without asking (``--notes`` with the release, ``{tag}``, e.g.
@@ -152,7 +163,10 @@ the compare's result there as JSON: ``status`` (``pass`` or ``fail``), a
 one-line ``summary`` ("round 20 (v6.12.119-rt25) against 19: 54 jobs, no
 regressions", or the regressions named), the two rounds, the regressions
 and, with ``grafana-url`` in srt-build's configuration, the ``url`` of
-the "RT rounds compared" dashboard of both. srt shows the summary and the
+the "RT rounds compared" dashboard of both: ``system_config:
+grafana-url: http://monitor.lan:3000`` in ``config.yml`` (srt-build
+reads the first ``config.yml`` it finds, its checkout's before
+``~/.config/srt-build/config.yml``). srt shows the summary and the
 link in ``srt status`` and keeps them in its log (``srt log``). Without
 ``SRT_TEST_RESULT`` (the command run by hand) the argument is empty and
 nothing is written.
