@@ -286,6 +286,9 @@ def test_regression_edges():
     assert reg(60, 90)  # +50 %, +30 us
     assert reg(50, 70)  # +40 %, +20 us: at the edge
     assert not reg(90, 60) and not reg(0, 30) and not reg(42, None)
+    # Only a longer latency counts: the patched rtla took the user-space
+    # column of stress-ng-io on rpi3-32 from 20913 us to 217 us.
+    assert not reg(20913, 217) and not reg(1000, 1)
     assert reg(60, 75, 20, 10) and not reg(60, 75)
 
 

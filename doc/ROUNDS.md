@@ -315,7 +315,8 @@ All but `start` run without the kernel tree (`repeat` too).
 - `round compare [A] [B] [--check] [--json]`: board, flavor, test and
   workload both rounds have, side by side (max latency, change in %),
   "regression" where B is above A by at least `compare-min-percent`
-  (40) and `compare-min-us` (20 us), TUNING.md's rule; then what only
+  (40) and `compare-min-us` (20 us), TUNING.md's rule (only longer
+  latencies: a shorter one is never a regression); then what only
   one round has (not a regression), the jobs with problems of both and
   B's jobs not Complete or not in the archive, from the archive. Its
   first line names both rounds with their kernels, its last counts the

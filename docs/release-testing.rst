@@ -95,7 +95,9 @@ release round and the release round before it. It judges as `doc/TUNING.md
 median changes 5-9 % from round to round, one test in ten up to 30-40 %,
 and small values (c2d) swing more in percent, so only a change of at
 least 40 % and 20 us is marked "regression" (``compare-min-percent``,
-``compare-min-us`` in the configuration). For a regression rerun the
+``compare-min-us`` in the configuration). Only a longer latency counts:
+a shorter one is never a regression, however large the change (the
+patched rtla took a stress-ng column from 20 ms to 0.2 ms). For a regression rerun the
 job, and if it stays, see :doc:`debugging`. ``--check`` exits with 1 on
 a regression or a job of the new round not Complete; a problem ``round
 report`` flags in both rounds alike (a max latency above 1 ms on the

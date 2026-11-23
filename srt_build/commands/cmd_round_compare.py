@@ -156,7 +156,8 @@ def thresholds(system_config):
 
 
 def is_regression(va, vb, min_percent=MIN_PERCENT, min_us=MIN_US):
-    """B above A by at least min_percent and at least min_us."""
+    """B above A by at least min_percent and at least min_us. Only a
+    longer latency counts: a shorter one is never a regression."""
     if not va or vb is None:
         return False
     return (vb - va) / va * 100 >= min_percent and vb - va >= min_us
