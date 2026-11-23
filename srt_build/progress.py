@@ -272,16 +272,24 @@ class BuildProgress:
         print(text, file=self.out, flush=True)
 
     def announce(self):
-        """building 14 kernels: bbb rt, ll, nohz, up, vp; c2d ..."""
+        """building 14 kernels, one per board and flavor (about 1h10m):
+          bbb      rt (6m12s), nohz (5m58s), ...
+          c2d      rt, nohz, ...
+        A line per board, each flavor its own kernel with its own config,
+        the last build's time where known."""
         per_board = {}
         for board, flavor in self.plan:
-            per_board.setdefault(board, []).append(flavor)
-        boards = "; ".join(f"{b} {', '.join(f)}" for b, f in per_board.items())
-        text = f"building {len(self.plan)} kernels: {boards}"
+            last = self.times.get(f"{board} {flavor}")
+            name = flavor if last is None else f"{flavor} ({duration(last)})"
+            per_board.setdefault(board, []).append(name)
+        text = f"building {len(self.plan)} kernels, one per board and flavor"
         left = builds_left(self.times, self.plan)
         if left is not None:
             text += f" (about {duration(left)})"
-        self.say(text)
+        width = max(len(b) for b in per_board) if per_board else 0
+        lines = [text + ":"]
+        lines += [f"  {b:{width}}  {', '.join(f)}" for b, f in per_board.items()]
+        self.say("\n".join(lines))
 
     def start(self, board, flavor):
         self.started += 1

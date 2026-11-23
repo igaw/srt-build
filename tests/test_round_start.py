@@ -484,7 +484,10 @@ def test_build_progress(lab, builds, monkeypatch, capsys):
     out = capsys.readouterr().out
     built = [f for s, f, _ in builds if s == "build"]
     n = len(built)
-    assert f"building {n} kernels: c2d {', '.join(built)}\n" in out
+    assert (
+        f"building {n} kernels, one per board and flavor:\n"
+        f"  c2d  {', '.join(built)}\n"
+    ) in out
     assert f"build 1/{n}: c2d {built[0]}\ninstalling c2d {built[0]}\n" in out
     assert f"built c2d {built[0]} in 1m00s (1 of {n} done)" in out
     assert "submitting round 1: c2d, 2 submissions each" in out
@@ -496,7 +499,9 @@ def test_build_progress(lab, builds, monkeypatch, capsys):
     # The next time: the last durations, and about how long is left.
     start(lab, skip_build=False)
     out = capsys.readouterr().out
-    assert f"building {n} kernels: c2d {', '.join(built)} (about {n}m" in out
+    assert f"building {n} kernels, one per board and flavor (about {n}m" in out
+    each = ", ".join(f"{f} (1m00s)" for f in built)
+    assert f"\n  c2d  {each}\n" in out
     assert f"build 1/{n}: c2d {built[0]} (last time 1m00s)" in out
     assert f"(1 of {n} done, about {n - 1}m" in out
 
@@ -505,6 +510,6 @@ def test_build_progress(lab, builds, monkeypatch, capsys):
         f.write("{not json")
     start(lab, skip_build=False)
     out = capsys.readouterr().out
-    assert "last time" not in out and f"building {n} kernels: c2d" in out
+    assert "last time" not in out and f"building {n} kernels, one per" in out
     with open(times) as f:
         assert sorted(json.load(f)) == sorted(f"c2d {f}" for f in built)

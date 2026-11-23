@@ -252,8 +252,10 @@ All but `start` run without the kernel tree (`repeat` too).
     after a fetch), or when the LAVA server's free disk is below
     `lava-disk-min-gb` (10; `ssh <lava-ssh> df /var/lib/lava`, default
     `root@<instance>`; "unknown" if not reachable).
-  - The builds (progress.py): first the plan (`building 14 kernels:
-    bbb rt, ll, nohz, up, vp; c2d ...`), then per kernel `build 3/14:
+  - The builds (progress.py): first the plan, a line per board with its
+    flavors, each a kernel of its own (`building 14 kernels, one per
+    board and flavor (about 1h10m):`, `  bbb  rt (6m35s), nohz, ...`),
+    then per kernel `build 3/14:
     rpi3-64 nohz (last time 6m12s)`, `installing rpi3-64 nohz` and
     `built rpi3-64 nohz in 5m58s (3 of 14 done, about 40m left)`;
     make's output stays as it was (only its errors). Each build's

@@ -173,7 +173,8 @@ running, 21 queued, 3h12m so far, about 2h40m left``. Without
 the round is done, it goes on with the check.
 
 While ``round start`` builds, ``srt test`` shows where it is: the plan
-(``building 14 kernels: ...``), per kernel ``build 3/14: rpi3-64 nohz
+(``building 14 kernels, one per board and flavor``, then a line per
+board with its flavors and their last build times), per kernel ``build 3/14: rpi3-64 nohz
 (last time 6m12s)`` and ``built rpi3-64 nohz in 5m58s (3 of 14 done,
 about 40m left)``, from the durations of the last builds; then the
 submissions and how long ``round start`` took.
