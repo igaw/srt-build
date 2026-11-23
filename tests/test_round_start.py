@@ -244,6 +244,18 @@ def test_build_first(lab, builds, capsys):
     assert "c2d: built " in capsys.readouterr().out
 
 
+def test_started_after_build(lab, builds, monkeypatch):
+    """A round starts when its jobs are submitted: round wait's time so
+    far doesn't count the build."""
+    stamps = iter(["2026-11-23T14:37:00Z", "2026-11-23T16:56:00Z"])
+    monkeypatch.setattr(cmd_round_start, "new_round", lambda *a, **kw:
+                        archive.new_round(*a, **kw) | {"started": next(stamps)})
+    monkeypatch.setattr(cmd_round_start, "now", lambda: next(stamps))
+    start(lab, skip_build=False)
+    info = archive.load_round(str(lab.top), "1")
+    assert info["started"] == "2026-11-23T16:56:00Z"
+
+
 def test_skip_build_builds_nothing(lab, builds):
     start(lab, skip_build=True)
     assert builds == [] and lab.submitted

@@ -60,6 +60,7 @@ from ..archive import (
     load_round,
     new_round,
     next_round,
+    now,
     parse_round,
     round_ids,
     round_kind,
@@ -461,6 +462,7 @@ def cmd_round_start(args, system_config, machine_config, kernel_config):
             build_board(board, subs, rid, system_config, machine_config,
                         kernel_config, progress)  # fmt: skip
         print(f"built {len(progress.done)} kernels in {duration(progress.took())}")
+        info["started"] = now()  # the round starts with its jobs, not the build
 
     for one in each_round(archive, info, rids):
         print(f"submitting round {one['round']}: {', '.join(one['boards'])}, "
