@@ -553,6 +553,40 @@ of problem now.
 because the device tree lists 4 CPUs and the kernel is uniprocessor.
 Expected; the checks ignore it (`report.KNOWN_KERNEL_WARNINGS`).
 
+**Lab failures: a job stalls at the first command over NFS.** Two
+jobs ended Incomplete at the same step: right after login, LAVA's
+first test shell command, `. /lava-N/environment` (read from the NFS
+root), didn't answer within LAVA's fixed 15 s ("Failed to check
+'. /lava-N/environment' return code!"). Both were checked against
+lava.lan's journal and the UniFi controller's logs and port counters
+(read-only access, see the homelab notes):
+
+- job 1331 (round 19, bbb rt-tests, 2026-11-21 16:05:32 UTC): the
+  board logged `cpsw-switch ... end0: Link is Down` at that second.
+  The UniFi firmware was being updated (gateway 16:01, switch `sw`
+  16:08, `sw-us8-1` 16:11; `sw` restarted about 16:05). Not the
+  board, not the kernel. Lesson: update the network only when no lab
+  jobs run (`round cancel` or an empty queue first), health checks
+  after.
+- job 1534 (round 20, rpi3-32 isolcpus nohz, 2026-11-23 16:58 UTC):
+  no network cause. lava.lan served the NFS mount (rpc.mountd
+  16:57:57) and logged no kernel, NFS or link messages all afternoon;
+  5 jobs on the other boards, booting from the same NFS server in the
+  same minute, were Complete; UniFi logged no event on rpi3-32's port
+  (sw 11), no update or restart that day, 0 errors and drops on all
+  ports, and the board ports are STP edge ports (no 30 s hold after
+  link-up). The board echoed the command but didn't answer within
+  15 s, in the boot with `nohz_full=1-3`. Whether it was busy or its
+  NFS access stalled can't be told: Linux logs "nfs: server not
+  responding" only after about 60 s. Being observed: if it comes
+  back, the next step is repeating rpi3-32 isolcpus (`round repeat
+  --boards rpi3-32 --tests isolcpus --count 10`) and a cable/port swap
+  to tell the board from the network.
+
+Board ports on `sw`: 9 bbb, 11 rpi3-32, 12 rpi3-64, 13 c2d, 16
+beryllium (the lava VM). UniFi's STP flap warnings on 11 and 12 come
+from the power cycling, two link-ups per job, and are expected.
+
 **Noise floors.** Each board has an interrupt that sets its lowest
 achievable latency in the rt flavor:
 
@@ -689,6 +723,10 @@ looked like lab problems until we looked closer.
 - **Switching the fair server off for every test**: see above.
 
 ## Open questions
+
+- rpi3-32 job 1534: an Incomplete at the first NFS read after login
+  without a network cause (see Board and lab quirks). Watch the next
+  rounds for the same error on any board.
 
 - rpi3-32 rtla-osnoise rt-isolcpus once reported 532 ms (job 367,
   round 6). It did not come back in 21 tries; RT throttling, gone since
