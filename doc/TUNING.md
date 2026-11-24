@@ -363,6 +363,26 @@ acct and led above.
 messages from acct in 15 s left cyclictest at 11 us (the RT kernel
 prints from a thread). The stressors are left out for clean logs.
 
+**Every left-out stressor and its reason.** Each `-x` name in
+`jobs/rt/stress-ng-class/` is in this table, with the section above
+that explains it. A stressor goes into a job's `-x` only with a line
+here; when stress-ng in the rootfs changes, check the "runs in" rows
+against its `--class <class>?` lists (classes from stress-ng 0.22.01's
+`.classifier`).
+
+| Job | Reason | Stressors |
+|---|---|---|
+| all | Outranks the measurement (RT or deadline policies, FIFO 99, its own RT loop, starves the fair server), see "Some stressors are left out" | softlockup, cpu-sched, schedmix, cyclic, hrtimers, mutex, schedpolicy (scheduler, os) |
+| all | Ran the board out of memory, see "No stressor that drives the board out of memory" | clone (scheduler, os); memrate, memthrash, malloc, resources, stack (memory; malloc, resources, stack also os); bigheap, brk, env, mmapmany, mmaphuge, mmapcow, mmap, dev-shm, shm, copy-file, dirmany, mlock, mlockmany, open (os); sockpair (network, os) |
+| os | Floods the kernel log, no latency effect | acct, led, procfs, loop, memhotplug |
+| memory | Measures the arch's TLB maintenance, not the kernel (ARM broadcast vs x86 IPIs), see above and "Kind B" | tlb-shootdown |
+| scheduler, memory | Runs in the pipe job ("Every stressor runs in one job only") | fifo, tee (scheduler); pipe, pipeherd (memory) |
+| os | Runs in the io job | aio, aiol, hdd, io-uring, pseek, readahead, revio, seek, sync-file |
+| os | Runs in the memory job | bad-altstack, full, memfd, mincore, null, numa, numacopy, oom-pipe, remap, rmap, tmpfs, vm, vm-addr, vm-rw, vm-segv, zero |
+| os | Runs in the network job | bpf, dccp, epoll, epollmany, eth-sniff, icmp-flood, ovpn, ping-sock, rawpkt, rawsock, rawudp, sigurg, sock, sockabuse, sockdiag, sockfd, sockmany, tun, udp, udp-flood |
+| os | Runs in the scheduler job | daemon, exec, exit-group, flipflop, fork, forkheavy, futex, kill, loadavg, min-nanosleep, mmapfork, mq, msg, mtx, nanosleep, nice, poll, prio-inv, pthread, race-sched, resched, sem, sem-sysv, session, sleep, spawn, switch, varyload, vfork, vforkmany, wait, workload, yield, zombie |
+| os | Runs in the pipe job | fifo, pipe, pipeherd, ring-pipe, sendfile, splice, tee, vm-splice |
+
 ### The fair server under a FIFO load
 
 Round 11 (jobs 730-753, rtla timerlat) still measured 4-185 ms in
