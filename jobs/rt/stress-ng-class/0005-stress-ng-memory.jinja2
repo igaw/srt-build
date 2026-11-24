@@ -8,6 +8,6 @@ definitions:
 {{ td.definition('rtla/rtla-timerlat.yaml', 'rtla-timerlat', {
     'DURATION': '15m',
     'RT_PRIORITY': 'f:98',
-    'BACKGROUND_CMD': 'stress-ng -v --oom-avoid --class memory --seq 0 -t 15 -x memrate,memthrash,malloc,resources,stack,pipe,pipeherd',
+    'BACKGROUND_CMD': 'stress-ng -v --oom-avoid --class memory --seq 0 -t 15 -x memrate,memthrash,malloc,resources,stack,pipe,pipeherd,tlb-shootdown',
 }) }}
 {% endblock tests -%}

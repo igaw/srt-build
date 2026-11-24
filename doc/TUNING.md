@@ -346,6 +346,15 @@ task names do. An OOM kill now fails the job's `kernel-log-clean`
 check and shows in `jobs report` ("invoked oom-killer"), so a
 stressor that starts doing it on a new kernel or board shows up.
 
+**tlb-shootdown is left out of the memory job** (2026-11-24): on the
+Pis one instance on another CPU takes an idle CPU to about 1 ms (see
+"Kind B: the Pi 3's shared memory system"). On ARM every TLB
+invalidation is broadcast in hardware to all cores; x86 sends IPIs only
+to the CPUs that run the address space, so a CPU that only measures
+never sees them (c2d stays below 65 us). The stressor measures the
+architecture's TLB maintenance, not the kernel, and its result differs
+by arch for that reason alone. It is in the memory class only, not os.
+
 memhotplug is left out of the os job too: it filled the log with about
 1300 lines of "page dumped because: unmovable page" (rpi3-64), like
 acct and led above.
@@ -526,8 +535,9 @@ investigation while repeat rounds run.
    flag on `t`/`i` only) until the rtla fix is in the lab.
 
    Done for the memory class on rpi3-32 (2026-11-24, v6.12.119-rt25,
-   hack jobs 1561-1563), see "Kind B: the Pi 3's shared memory system"
-   below. The scheduler and os classes and rpi3-64 are still open.
+   hack jobs 1561-1563) and for memory, scheduler and os on both Pis
+   (hack jobs 1564-1568), see "Kind B: the Pi 3's shared memory
+   system" below. Open: the os class's rare peaks.
 
 Done when, over at least five repeat rounds on one kernel, every board
 and class stays inside its normal range (docs/dashboards.rst) with `t`
@@ -588,12 +598,52 @@ So two effects, both outside the code running on the measured CPU:
 c2d (x86, below 65 us in every class) and bbb (one core, no other core
 to contend with) don't show either. Verdict: neither the test's fault
 nor a stable-rt problem, the board's limit; mainline PREEMPT_RT runs
-the same TLB and memory code. Open: whether to leave tlb-shootdown in
-the memory class (and accept about 1 ms on the Pis) or exclude it with
-this reason; the same check for rpi3-64 and for the scheduler and os
-classes; whether arm32's per-page broadcast in `flush_tlb_range` (arm64
-switches to a full flush above a limit) makes the TLB case worse than
-it has to be.
+the same TLB and memory code. tlb-shootdown is now left out of the
+memory job (see "No stressor that drives the board out of memory"
+above for the reason); the memory-bandwidth stressors stay, they are a
+load real applications put on the board.
+
+arm32's `flush_tlb_range` broadcasts one invalidation per page, where
+arm64 switches to a single full flush above a limit; that may make the
+TLB case on rpi3-32 worse than it has to be. An arch limitation, a
+mainline topic, not stable-rt's.
+
+**rpi3-64 and the scheduler and os classes** (hack jobs 1564-1568,
+same method, each stressor 20 s with the class job's exclusions, then
+the worst on CPUs 1-3 with CPU 0 measuring only). Thread max in us,
+rpi3-32 / rpi3-64:
+
+| | memory | scheduler | os |
+|---|---|---|---|
+| class job, rounds 15-t18 | 690-1062 / 707-958 | 711-910 / 736-982 | 378-972 / 408-786 |
+| worst stressor alone | vm 793 / matrix-3d 731 | workload 862 / 727 | mremap 279 / fd-fork 482 |
+
+| Load on CPUs 1-3 | CPU 0 thread max, rpi3-32 / rpi3-64 (us) |
+|---|---|
+| none / cpu x3 | 29 / 25, 26 / 31 |
+| workload x1 / x3 | 781 / 670, 818 / 880 |
+| varyload x1 / x3 | 87 / 129, 601 / 708 |
+| tlb-shootdown x1 / x3 (rpi3-64) | 1033 / 935 |
+| matrix-3d, vm-addr, fd-fork x3 (rpi3-64) | 507, 207, 243 |
+| mremap x3 (rpi3-32) | 195 |
+
+- **memory on rpi3-64**: the same picture as rpi3-32, tlb-shootdown
+  alone reaches 1 ms.
+- **scheduler**: one stressor, `workload`, accounts for the class
+  result: a single instance on another CPU takes an idle CPU 0 to
+  670-780 us. Its methods one at a time (job 1568, rpi3-64): memmove
+  822, memset 730, random 624 (it picks memset/memmove too), all 712;
+  memread 51 and the 16 compute methods 17-41. So it is write bandwidth:
+  one core writing memory flat out stalls the others. Unlike
+  tlb-shootdown that's a load a real application can produce, so the
+  stressor stays and the scheduler class keeps measuring it.
+- **os**: no stressor alone gets above 482 us, and the class job is
+  usually at 400-550 us; the peaks (rpi3-32: 972 in round 20, 782 in
+  round 17) are rare and not reproduced by any stressor on its own.
+- Harmless kernel messages in the hunts: opcode's random instructions
+  cause arm32 user alignment-fault reports (`8<--- cut here`),
+  `workqueue: Failed to create a worker thread: -EAGAIN` is the thread
+  limit during the fork stressors.
 
 ## Board and lab quirks
 
@@ -789,6 +839,10 @@ looked like lab problems until we looked closer.
 
 ## Open questions
 
+- os class peaks on the Pis (rpi3-32 972 us in round 20, 782 in round
+  17; normally 400-550): no single stressor reproduces them (hack jobs
+  1564-1567). Watch the rounds; if they recur, run the os class with
+  rtla `-a` to catch one.
 - rpi3-32 job 1534: an Incomplete at the first NFS read after login
   without a network cause (see Board and lab quirks). Watch the next
   rounds for the same error on any board.
