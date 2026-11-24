@@ -525,10 +525,75 @@ investigation while repeat rounds run.
    space (`u`) hides the kernel side. Show `t`/`i` apart from `u` (or
    flag on `t`/`i` only) until the rtla fix is in the lab.
 
+   Done for the memory class on rpi3-32 (2026-11-24, v6.12.119-rt25,
+   hack jobs 1561-1563), see "Kind B: the Pi 3's shared memory system"
+   below. The scheduler and os classes and rpi3-64 are still open.
+
 Done when, over at least five repeat rounds on one kernel, every board
 and class stays inside its normal range (docs/dashboards.rst) with `t`
 and `i` below 1 ms, or each exception is explained here with its
 cause.
+
+### Kind B: the Pi 3's shared memory system
+
+The memory class on rpi3-32 (t up to 1062 us in round 19, median 774
+over 12 rounds) comes from the hardware the four cores share, not from
+a code path in the kernel. Three hack jobs on v6.12.119-rt25 (rt flavor,
+rootfs-2026.11.22), measured as the class job does (rtla timerlat hist
+`-u -P f:98`):
+
+1. **Each stressor alone** (job 1561, `stress-ng-hunt.sh` with
+   `MEASURE=rtla`, 30 s each, all 54 stressors of the class job): none
+   reaches 1 ms; the class result is the top of a band at 500-800 us.
+   Thread max: vm 793, tlb-shootdown 681, vm-addr 638, tree 596,
+   bitonicsort 585, stream 471; the other 48 below 400, most below
+   200. None breaks a rule of the class jobs (normal priority, no
+   policy changes, no OOM; lockbus and misaligned cause a few
+   alignment-fault messages). The IRQ side is high too (bitonicsort,
+   a user-space sort, 394 us).
+2. **What runs in the way** (job 1562, rtla `-a 450`, the top six):
+   no section with interrupts off, none that can't be preempted: IRQ
+   latency 5-105 us, the timer often hit stress-ng in user space
+   (`__irq_usr`), interference by other IRQs 1-23 us (USB, IPI).
+   Instead the normal steps are slow: the timerlat IRQ handler, a few
+   lines that take single-digit us, took 70-250 us, and the switch to
+   the measuring thread about as long.
+3. **Contention across CPUs** (job 1563): the stressor on CPUs 1-3
+   only, rtla on CPU 0 only, which runs nothing else:
+
+   | Load on CPUs 1-3 | CPU 0 thread max (us) | CPU 0 IRQ max (us) |
+   |---|---|---|
+   | none | 50 | 11 |
+   | cpu x3 (stays in the cache) | 29 | 8 |
+   | stream x1 / x3 | 79 / 546 | 31 / 128 |
+   | bitonicsort x1 / x3 | 89 / 372 | 28 / 106 |
+   | vm x1 / x3 | 133 / 689 | 28 / 249 |
+   | tlb-shootdown x1 / x3 | 933 / 1070 | 371 / 438 |
+
+So two effects, both outside the code running on the measured CPU:
+
+- **Memory bandwidth** (stream, the sorts, vm, vm-addr): the latency on
+  an idle CPU grows with the number of instances on the others, from
+  80-130 us with one to 370-690 us with three, while a load that stays
+  in the cache leaves it at 29 us. The Pi 3's cores share a 512 KB L2
+  and slow LPDDR2 (with the GPU and the USB controller); once the other
+  cores saturate it, every cache miss on the RT path waits.
+- **TLB shootdown**: one instance on another CPU already takes an idle
+  CPU 0 to 933 us, its IRQ latency to 371 us. On ARMv7 SMP (and arm64)
+  TLB maintenance is broadcast in hardware to every core; a flood of
+  broadcast invalidations stalls the others, measured CPU included.
+  This is the one stressor of the class that alone reaches about 1 ms,
+  and the likely source of the class runs' peaks.
+
+c2d (x86, below 65 us in every class) and bbb (one core, no other core
+to contend with) don't show either. Verdict: neither the test's fault
+nor a stable-rt problem, the board's limit; mainline PREEMPT_RT runs
+the same TLB and memory code. Open: whether to leave tlb-shootdown in
+the memory class (and accept about 1 ms on the Pis) or exclude it with
+this reason; the same check for rpi3-64 and for the scheduler and os
+classes; whether arm32's per-page broadcast in `flush_tlb_range` (arm64
+switches to a full flush above a limit) makes the TLB case worse than
+it has to be.
 
 ## Board and lab quirks
 
