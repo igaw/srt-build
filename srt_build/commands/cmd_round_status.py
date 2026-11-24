@@ -12,8 +12,8 @@ Complete, as it happens, warns when the LAVA server's disk runs low,
 and exits with 1 if a job ended not Complete; then `round report`.
 With --batch it waits for the rounds of a batch (round start/repeat
 --count) one after the other, in their order; --report reports each
-round (`round report`) once it has finished, while the later ones are
-still queued, and exits with 1 on problems too. While it waits it
+round (`round report`, which exports it too) once it has finished,
+while the later ones are still queued, and exits with 1 on problems too. While it waits it
 shows where the round is (progress.py): finished, running and queued
 jobs, the time so far and, from the jobs' durations in earlier rounds,
 about how long is left; on a terminal in one line updated in place,
@@ -40,7 +40,12 @@ from .cmd_round import (
     pick_rounds,
     print_json,
 )
-from .cmd_round_report import add_keep_uploads, report_round
+from .cmd_round_report import (
+    add_keep_uploads,
+    export_whole,
+    report_round,
+    wants_export,
+)
 from .cmd_round_start import LAVA_DISK_MIN_GB, lava_free_gb
 from ..progress import (
     QUEUED,
@@ -180,6 +185,8 @@ def cmd_round_wait(args, system_config, machine_config, sleep=time.sleep):
             info = load_round(archive, rid)
             keep = getattr(args, "keep_uploads", False)
             summaries = report_round(api, system_config, archive, info, keep)
+            if wants_export(args):
+                export_whole(system_config, archive, info)
             failed |= any(s.problems() for s in summaries)
     if failed:
         sys.exit(1)

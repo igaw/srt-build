@@ -30,7 +30,7 @@ prune` drops them after `test-retention-days`.
     srt-build round rerun 13 961          # a lab failure: run the job again
     srt-build round repeat 15             # its jobs again, a new round (no tree)
     srt-build round report                # fetch into the archive, the table
-    srt-build round export                # to VictoriaMetrics, label round
+    srt-build round export                # to VictoriaMetrics (report does it)
     srt-build round compare 12 13         # max latency side by side
     srt-build round compare --check       # the newest against the one before
     srt-build round list                  # the rounds in the archive
@@ -45,7 +45,9 @@ upstream, or the LAVA server's disk is low. Every job carries
 (job, results, log, uploads; the Artifactorial token replaced), writes
 `report.txt` and prints the `jobs report` table from the archive; run
 it again for the jobs that weren't finished. Then it deletes the
-archived uploads from Artifactorial (`--keep-uploads`: not). Rounds
+archived uploads from Artifactorial and sends the whole round to
+VictoriaMetrics, once (`--no-export`: not; `--keep-uploads`: neither,
+for a second archive). Rounds
 that ran before `round start`:
 
     srt-build round import 12 --ids 912-965 --keep-uploads

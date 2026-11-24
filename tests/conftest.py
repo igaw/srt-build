@@ -16,6 +16,15 @@ def no_network(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", _no_network)
 
 
+@pytest.fixture(autouse=True)
+def no_metrics_config(monkeypatch, tmp_path):
+    """Not the user's metrics.yml: round report exports unless told
+    not to, which without a metrics-config finds no file."""
+    from srt_build import victoria
+
+    monkeypatch.setattr(victoria, "METRICS_CONFIG", str(tmp_path / "no-metrics.yml"))
+
+
 @pytest.fixture
 def deleted(monkeypatch):
     """Fake Artifactorial deletion: the URLs deleted, in order."""

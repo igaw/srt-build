@@ -237,6 +237,31 @@ def test_wait_batch_report(lab, capsys):
         )
 
 
+def test_wait_report_exports(lab, monkeypatch, tmp_path):
+    """round wait --report sends each round once it is whole, like
+    round report; with --keep-uploads it doesn't (the batch test)."""
+    from srt_build import victoria
+
+    batch(lab)
+    metrics = tmp_path / "metrics.yml"
+    metrics.write_text("url: http://vm.test:8427\n")
+    cfg = {**lab.cfg, "metrics-config": str(metrics)}
+    sent = []
+    monkeypatch.setattr(victoria, "send", lambda c, body: sent.append(body))
+
+    def finish(seconds):
+        for j in (4, 5):
+            lab.lava.jobs[j].update(state="Finished", health="Complete")
+
+    args = SimpleNamespace(round=None, batch="12", interval=1, report=True,
+                           keep_uploads=False, no_export=False,
+                           quiet=True)  # fmt: skip
+    cmd_round_status.cmd_round_wait(args, cfg, {}, sleep=finish)
+    for rid in ("12", "13"):
+        assert archive.load_round(str(lab.top), rid).get("exported")
+    assert sent
+
+
 def test_cancel(lab, monkeypatch, capsys):
     batch(lab)
     canceled = []

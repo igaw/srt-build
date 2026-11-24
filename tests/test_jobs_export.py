@@ -60,7 +60,9 @@ def test_ids_exactly_and_every_time(lab):
 
 
 def test_round_labels_from_the_archive(lab):
-    cmd_round_report.cmd_round_import(SimpleNamespace(round="12", ids="1"), lab.cfg, {})
+    cmd_round_report.cmd_round_import(
+        SimpleNamespace(round="12", ids="1", no_export=True), lab.cfg, {}
+    )
     ex.cmd_jobs_export(args(ids="1-2"), lab.cfg, {})
     first = json.loads(lab.sent[0].splitlines()[0])["metric"]
     assert first["round"] == "12" and first["round_kind"] == "release"
@@ -70,8 +72,12 @@ def test_round_labels_from_the_archive(lab):
 def test_no_arguments_newest_round_not_exported(lab, capsys):
     ex.cmd_jobs_export(args(), lab.cfg, {})
     assert "every round went out" in capsys.readouterr().err
-    cmd_round_report.cmd_round_import(SimpleNamespace(round="12", ids="1"), lab.cfg, {})
-    cmd_round_report.cmd_round_import(SimpleNamespace(round="13", ids="2"), lab.cfg, {})
+    cmd_round_report.cmd_round_import(
+        SimpleNamespace(round="12", ids="1", no_export=True), lab.cfg, {}
+    )
+    cmd_round_report.cmd_round_import(
+        SimpleNamespace(round="13", ids="2", no_export=True), lab.cfg, {}
+    )
     ex.cmd_jobs_export(args(), lab.cfg, {})
     assert jobs_sent(lab) == [{"2"}]
     assert archive.load_round(lab.cfg["round-archive"], "13")["exported"]

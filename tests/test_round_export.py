@@ -28,7 +28,7 @@ def lab(tmp_path, monkeypatch, deleted):
         "metrics-config": str(cfg),
     }
     cmd_round_report.cmd_round_import(
-        SimpleNamespace(round=12, ids="1-3"), system_config, {}
+        SimpleNamespace(round=12, ids="1-3", no_export=True), system_config, {}
     )
     return SimpleNamespace(lava=lava, cfg=system_config)
 
@@ -87,3 +87,44 @@ def test_send_once(lab, monkeypatch, capsys):
     assert "every round went out" in capsys.readouterr().err
     cmd_round_export.cmd_round_export(args(all=True, force=True), lab.cfg, {})
     assert len(sent) == 6
+
+
+def report(lab, **kw):
+    a = SimpleNamespace(**{"round": "12", "keep_uploads": False, "no_export": False,
+                           "json": False, **kw})  # fmt: skip
+    cmd_round_report.cmd_round_report(a, lab.cfg, {})
+
+
+def test_report_exports_once(lab, monkeypatch, capsys):
+    """round report sends a whole round that hasn't gone out, once."""
+    sent = []
+    monkeypatch.setattr(victoria, "send", lambda cfg, body: sent.append(body))
+    report(lab)
+    assert len(sent) == 3
+    assert archive.load_round(lab.cfg["round-archive"], "12")["exported"]
+    assert "round 12: sent " in capsys.readouterr().err
+    report(lab)
+    assert len(sent) == 3
+
+
+@pytest.mark.parametrize("flag", ["no_export", "keep_uploads"])
+def test_report_without_export(lab, monkeypatch, flag):
+    """--no-export, and --keep-uploads (a second archive): nothing sent."""
+    sent = []
+    monkeypatch.setattr(victoria, "send", lambda cfg, body: sent.append(body))
+    report(lab, **{flag: True})
+    assert sent == []
+    assert not archive.load_round(lab.cfg["round-archive"], "12").get("exported")
+
+
+def test_report_export_fails(lab, monkeypatch, capsys):
+    """VictoriaMetrics away: the report stands, round export later."""
+    def away(cfg, body):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(victoria, "send", away)
+    report(lab)
+    err = capsys.readouterr().err
+    assert "round 12: not exported (job 1: sending failed: connection refused)" in err
+    assert "round export 12 sends it" in err
+    assert not archive.load_round(lab.cfg["round-archive"], "12").get("exported")

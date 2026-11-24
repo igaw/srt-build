@@ -39,7 +39,7 @@ carries ``srt.round`` in its metadata.
   $ srt-build round wait --batch 16 --report   # each round, reported when done
   $ srt-build round cancel --batch 16   # give the lab back: the jobs not finished
   $ srt-build round report              # fetch into the archive, the table
-  $ srt-build round export              # to VictoriaMetrics, label round
+  $ srt-build round export              # to VictoriaMetrics (round report does it)
   $ srt-build round compare 12 13       # max latency side by side
   $ srt-build round compare --check     # newest release round against the one
                                         # before: exit 1 on a regression
@@ -101,8 +101,12 @@ Reports
 (job, results, log, uploads, with the Artifactorial token replaced),
 writes ``report.txt`` and prints the table: health, maximum latency,
 uploads and problems per job. Run it again for the jobs which weren't
-finished. Then it deletes the archived uploads from Artifactorial
-(``--keep-uploads``: not).
+finished. Then it deletes the archived uploads from Artifactorial and,
+once every job is in, sends the round to VictoriaMetrics as ``round
+export`` does, once. ``--no-export`` skips the export; ``--keep-uploads``
+skips both, for a second archive next to the one that exports. If
+VictoriaMetrics can't be reached, ``round report`` only warns and
+``round export N`` sends the round later.
 
 A job counts as a problem when LAVA reports it Incomplete, but also when it
 is Complete and still broken: a failed test case or LAVA action, a failed

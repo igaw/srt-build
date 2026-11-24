@@ -295,7 +295,9 @@ class Server:
                 "round_report",
                 "Fetch the round's finished jobs into the archive and report "
                 "every job with its problems. Deletes the archived uploads "
-                "from Artifactorial (copies verified) unless keep_uploads.",
+                "from Artifactorial (copies verified) and sends a whole round "
+                "to VictoriaMetrics (round export), both unless keep_uploads "
+                "(a second archive).",
                 {
                     "properties": {
                         **rnd,

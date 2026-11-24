@@ -9,6 +9,10 @@ scrubbed of secrets), then reports the round from the archive: the
 table of `jobs report`, also in <archive>/N/report.txt. A job that
 hasn't finished is shown as such and fetched by the next `round
 report`. Exits with 1 if any job has a problem, like `jobs report`.
+Once the round is whole in the archive it goes to VictoriaMetrics as
+`round export` sends it, once; a failure there only warns. Not with
+--no-export, nor with --keep-uploads: a second archive (the litterbox)
+leaves deleting the uploads and the export to the master archive.
 
 `round import` is for rounds that ran before `round start` existed:
 round.yaml from the jobs' srt.* metadata, then as `round report`.
@@ -42,6 +46,7 @@ from ..archive import (
 )
 from ..lava_api import LavaApi
 from ..metrics import job_metadata
+from ..victoria import load_metrics_config
 from ..report import _id_ranges, format_report, parse_id_list, summarize_job
 from ..rounds import check_instance, check_new_jobs, lava_instance
 from .cmd_round import add_json_arg, add_round_arg, pick_round, print_json
@@ -69,8 +74,42 @@ def add_keep_uploads(p):
     p.add_argument(
         "--keep-uploads",
         action="store_true",
-        help="don't delete the uploads from Artifactorial once archived",
+        help="don't delete the uploads from Artifactorial once archived, "
+        "don't export (a second archive; the master archive does both)",
     )
+    p.add_argument(
+        "--no-export",
+        action="store_true",
+        help="don't send the round to VictoriaMetrics (round export does later)",
+    )
+
+
+def wants_export(args):
+    """Whether round report sends the round once it is whole: unless
+    --no-export or --keep-uploads (a second archive, which leaves the
+    uploads and the export to the master archive)."""
+    skip = getattr(args, "no_export", False) or getattr(args, "keep_uploads", False)
+    return not skip
+
+
+def export_whole(system_config, archive, info):
+    """round export of a round that is whole in the archive and hasn't
+    gone out; a failure only warns, round export sends it later."""
+    from .cmd_round_export import export_round
+
+    rdir = round_dir(archive, info["round"])
+    whole = all(is_complete(rdir, j) for j in counted_jobs(info))
+    if info.get("exported") or not whole:
+        return
+    try:
+        cfg = load_metrics_config(system_config)
+        total, jobs = export_round(archive, info, cfg)
+    except (SystemExit, OSError) as e:
+        print(f"round {info['round']}: not exported ({e}); "
+              f"round export {info['round']} sends it", file=sys.stderr)  # fmt: skip
+        return
+    print(f"round {info['round']}: sent {total} samples of {jobs} jobs",
+          file=sys.stderr)  # fmt: skip
 
 
 def fetch_round(api, rdir, info):
@@ -197,6 +236,8 @@ def cmd_round_report(args, system_config, machine_config):
         getattr(args, "keep_uploads", False),
         show=not as_json,
     )
+    if wants_export(args):
+        export_whole(system_config, archive, info)
     if as_json:
         rdir = round_dir(archive, number)
         print_json(
@@ -247,5 +288,7 @@ def cmd_round_import(args, system_config, machine_config):
     summaries = report_round(
         api, system_config, archive, info, getattr(args, "keep_uploads", False)
     )
+    if wants_export(args):
+        export_whole(system_config, archive, info)
     if any(s.problems() for s in summaries):
         sys.exit(1)

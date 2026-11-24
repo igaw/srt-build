@@ -109,9 +109,13 @@ Pis) doesn't fail it.
 5. Export
 ---------
 
+``round report`` (and so ``round wait --report``) sends the round to
+VictoriaMetrics once every job is in, for the dashboards. Only if that
+failed, or ran with ``--no-export``:
+
 .. code-block:: console
 
-  $ srt-build round export             # to VictoriaMetrics, the dashboards
+  $ srt-build round export             # the newest round not exported yet
 
 6. Back to the release
 ----------------------

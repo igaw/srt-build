@@ -319,11 +319,11 @@ All but `start` run without the kernel tree (`repeat` too).
   - `--batch B`: every round of batch B, one after the other in their
     order (a later round finishing first is noticed when its turn
     comes), a line per round as it finishes.
-  - `--report [--keep-uploads]`: `round report` of each round once it
-    has finished, so the results come in while the later rounds are
-    still queued; exit 1 on problems too. A batch unattended, e.g. on
-    nitrogen: `round repeat 15 --count 5 --yes`, then `round wait
-    --batch 16 --report`, then `round export --all`.
+  - `--report [--keep-uploads] [--no-export]`: `round report` of each
+    round once it has finished (with its export), so the results come
+    in while the later rounds are still queued; exit 1 on problems too.
+    A batch unattended, e.g. on nitrogen: `round repeat 15 --count 5
+    --yes`, then `round wait --batch 16 --report`.
 - `round cancel [N | --batch B] [--dry-run] [--yes]`: cancel (XML-RPC
   `scheduler.jobs.cancel`) the jobs of the round, or of every round of
   the batch, that haven't finished, after listing them and asking. The
@@ -332,11 +332,14 @@ All but `start` run without the kernel tree (`repeat` too).
   `srt.round`) through XML-RPC (`lava_api.rpc_from_lavacli`), record
   `reruns: {JOB: NEW}`; `reported` is cleared. For lab failures; the
   replaced job stays in the archive but counts nowhere.
-- `round report [N] [--keep-uploads]`: fetch every finished job that has
-  no `complete` into the archive (job, tests, suites, log, uploads;
+- `round report [N] [--keep-uploads] [--no-export]`: fetch every
+  finished job that has no `complete` into the archive (job, tests, suites, log, uploads;
   scrubbed), fill `test_definitions`, write `report.txt`, print the
   report; then delete the archived uploads from Artifactorial ("Deleting
-  data"). Reads from the archive: `report.summarize_job` takes the
+  data") and, once the round is whole and hasn't gone out, `round
+  export` it (a failure warns; `round export N` later). `--keep-uploads`
+  (a second archive, the litterbox) does neither, `--no-export` skips
+  the export; the master archive (nitrogen) is the one that exports. Reads from the archive: `report.summarize_job` takes the
   archived files exactly as it takes LAVA's answers. A job not finished
   is shown so and fetched next time; LAVA isn't asked at all when the
   archive has everything. Jobs replaced by a rerun and jobs not whole in
